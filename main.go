@@ -1,6 +1,7 @@
 package main
 
 import (
+	"dedupe/utils"
 	"flag"
 	"fmt"
 	"os"
@@ -9,8 +10,12 @@ import (
 func main() {
 	name := flag.String("name", "World", "Name to greet")
 	verbose := flag.Bool("verbose", false, "Enable verbose output")
+	img, _ := utils.LoadImage("image.jpg")
 
 	flag.Parse()
+
+	var hash = utils.ImageHash(img)
+	fmt.Printf("Hash val: %X \n", hash)
 
 	if err := run(*name, *verbose); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
