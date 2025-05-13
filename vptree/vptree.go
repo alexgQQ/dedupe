@@ -8,7 +8,7 @@ import (
 )
 
 type Item struct {
-	Path string
+	ID   uint
 	Hash *dhash.DHash
 }
 
