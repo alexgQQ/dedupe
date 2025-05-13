@@ -15,6 +15,16 @@ func TestMinHamming(t *testing.T) {
 	}
 }
 
+func TestKnownHamming(t *testing.T) {
+	// a 0000 against 1111 case
+	zerohash := &DHash{0, 0}
+	hash := &DHash{0, 15}
+	result := Hamming(zerohash, hash)
+	if result != 4 {
+		t.Error("The distance between 0x0 and 0xf should be 4")
+	}
+}
+
 func TestMaxHamming(t *testing.T) {
 	zerohash := &DHash{0, 0}
 	maxhash := &DHash{math.MaxUint64, math.MaxUint64}
