@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestPlaceholder(t *testing.T) {
+func TestVPTree(t *testing.T) {
 	if false {
 		t.Error("How'd we even get here?")
 	}
