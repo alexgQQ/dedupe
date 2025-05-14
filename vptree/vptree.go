@@ -60,6 +60,31 @@ func (vp *VPTree) Search(target Item, k int) ([]Item, []float64) {
 	return results, distances
 }
 
+func (vp *VPTree) Within(target Item, radius float64) ([]Item, []float64) {
+	var results []Item
+	var distances []float64
+
+	q := make(queue, 0, 100)
+
+	tau := radius
+	vp.within(vp.root, tau, target, &q)
+
+	for q.Len() > 0 {
+		hi := heap.Pop(&q)
+		item := hi.(*QueueItem).Item
+		if item.ID != target.ID {
+			results = append(results, item)
+			distances = append(distances, hi.(*QueueItem).Dist)
+		}
+	}
+
+	for i, j := 0, len(results)-1; i < j; i, j = i+1, j-1 {
+		results[i], results[j] = results[j], results[i]
+		distances[i], distances[j] = distances[j], distances[i]
+	}
+	return results, distances
+}
+
 func (vp *VPTree) build(items []Item) *Node {
 	// Since this is called recursively there could be an empty slice that comes through here
 	if len(items) == 0 {
@@ -130,6 +155,41 @@ func (vp *VPTree) search(n *Node, tau float64, target Item, k int, q *queue) {
 
 		if dist-tau <= n.Threshold {
 			vp.search(n.Left, tau, target, k, q)
+		}
+	}
+}
+
+func (vp *VPTree) within(n *Node, tau float64, target Item, q *queue) {
+	// This comes through as nil when we've reached the end of a branch
+	if n == nil {
+		return
+	}
+
+	dist := distance(n.Item, target)
+
+	if dist < tau {
+		heap.Push(q, &QueueItem{n.Item, dist})
+	}
+
+	if n.Left == nil && n.Right == nil {
+		return
+	}
+
+	if dist < n.Threshold {
+		if dist-tau <= n.Threshold {
+			vp.within(n.Left, tau, target, q)
+		}
+
+		if dist+tau >= n.Threshold {
+			vp.within(n.Right, tau, target, q)
+		}
+	} else {
+		if dist+tau >= n.Threshold {
+			vp.within(n.Right, tau, target, q)
+		}
+
+		if dist-tau <= n.Threshold {
+			vp.within(n.Left, tau, target, q)
 		}
 	}
 }

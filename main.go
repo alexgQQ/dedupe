@@ -56,7 +56,7 @@ func main() {
 
 func run(files []string) error {
 	var items []vptree.Item
-	duplicates := make([][]int, len(files))
+	duplicates := make(map[uint][]uint)
 
 	for i, f := range files {
 		img, _ := utils.LoadImage(f)
@@ -67,31 +67,24 @@ func run(files []string) error {
 
 	tree := *vptree.New(items)
 	threshold := 10.0
-
-	for i, item := range items {
-		var dupes []int
-		// searching only works by neighbor and not by distance alone at the moment
-		results, distances := tree.Search(item, len(files))
-
-		for j, result := range results {
-			// results are ordered by distance so we can break
-			if distances[j] >= threshold {
-				break
-			}
-			dupes = append(dupes, int(result.ID))
-		}
-		duplicates[i] = dupes
-	}
-
-	for i, dupes := range duplicates {
-		if len(dupes) < 1 {
+	for _, item := range items {
+		found, _ := tree.Within(item, threshold)
+		if len(found) == 0 {
 			continue
 		}
-		fmt.Printf("%s -\n", files[i])
-		for _, d := range dupes {
-			fmt.Printf("%s, ", files[d])
+		var ids []uint
+		for _, r := range found {
+			ids = append(ids, r.ID)
 		}
-		fmt.Print("\n")
+		duplicates[item.ID] = ids
+	}
+
+	for key, value := range duplicates {
+		fmt.Printf("%s: ", files[key])
+		for _, v := range value {
+			fmt.Printf("%s, ", files[v])
+		}
+		fmt.Println("")
 	}
 
 	return nil
