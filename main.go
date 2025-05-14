@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 func validatePath(path string) error {
@@ -67,10 +68,11 @@ func run(files []string) error {
 	}
 
 	tree := *vptree.New(items)
-	threshold := 10.0
+	threshold := 22.0
+
 	for _, item := range items {
-		found, _ := tree.Within(item, threshold)
-		if len(found) == 0 {
+		found, dist := tree.Within(item, threshold)
+		if len(found) == 0 && len(dist) == 0 {
 			continue
 		}
 		var ids []uint
@@ -80,10 +82,30 @@ func run(files []string) error {
 		duplicates[item.ID] = ids
 	}
 
+	var skip []uint
+	var filegroups [][]string
 	for key, value := range duplicates {
-		fmt.Printf("%s: ", files[key])
+		if slices.Contains(skip, key) {
+			continue
+		}
+		var filenames []string
+		var group []uint = value
 		for _, v := range value {
-			fmt.Printf("%s, ", files[v])
+			group = append(group, duplicates[v]...)
+			skip = append(skip, v)
+		}
+		slices.Sort(group)
+		group = slices.Compact(group)
+		for _, g := range group {
+			filenames = append(filenames, files[g])
+		}
+		filegroups = append(filegroups, filenames)
+	}
+
+	for i, group := range filegroups {
+		fmt.Printf("%d\t", i)
+		for _, filename := range group {
+			fmt.Printf("%s, ", filename)
 		}
 		fmt.Println("")
 	}
