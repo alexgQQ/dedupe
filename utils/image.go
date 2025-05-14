@@ -31,18 +31,20 @@ func matchesAnyExt(path string, extensions []string) bool {
 	return false
 }
 
-func FindImages(root string) []string {
-	// This will do a recursive search through subdirectories
-	var a []string
+func FindImages(root string, subdirs bool) []string {
+	var images []string
 	var ext = []string{".png", ".jpg", ".jpeg"}
 	filepath.WalkDir(root, func(s string, d fs.DirEntry, e error) error {
 		if e != nil {
 			return e
 		}
 		if matchesAnyExt(d.Name(), ext) {
-			a = append(a, s)
+			images = append(images, s)
+		}
+		if !subdirs && root != d.Name() && d.IsDir() {
+			return fs.SkipDir
 		}
 		return nil
 	})
-	return a
+	return images
 }

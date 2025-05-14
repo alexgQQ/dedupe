@@ -38,13 +38,14 @@ func validatePath(path string) error {
 
 func main() {
 	dir := flag.String("target", "images", "target image directory")
+	recursive := flag.Bool("recursive", true, "")
 
 	flag.Parse()
 
 	if err := validatePath(*dir); err != nil {
 		log.Fatal(err)
 	}
-	files := utils.FindImages(*dir)
+	files := utils.FindImages(*dir, *recursive)
 	if len(files) < 1 {
 		log.Fatal("no images found")
 	}
