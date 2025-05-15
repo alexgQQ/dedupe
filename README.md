@@ -27,7 +27,7 @@ docker run \
   -w /go/src/github.com/alexgQQ/go-image-deduper \
   -e CGO_ENABLED=1 \
   docker.elastic.co/beats-dev/golang-crossbuild:${GOVERSION}-main \
-  --build-cmd "go build -o dedupe" \
+  --build-cmd "go build -ldflags '-s -w' -o dedupe" \
   -p linux/amd64
 
 docker run \
@@ -35,7 +35,7 @@ docker run \
   -w /go/src/github.com/alexgQQ/go-image-deduper \
   -e CGO_ENABLED=1 \
   docker.elastic.co/beats-dev/golang-crossbuild:${GOVERSION}-main \
-  --build-cmd "go build -o dedupe" \
+  --build-cmd "go build -ldflags '-s -w' -o dedupe" \
   -p windows/amd64
 ```
 
