@@ -9,9 +9,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 )
 
 func validatePath(path string) error {
@@ -40,13 +42,24 @@ func validatePath(path string) error {
 }
 
 func main() {
+	// dir := flag.String("target", "wallpapers", "target image directory")
 	dir := flag.String("target", "images", "target image directory")
 	recursive := flag.Bool("recursive", true, "")
 	output := flag.String("output", "stdout", "")
 	delete := flag.Bool("delete", false, "")
 	move := flag.Bool("move", false, "")
+	verbose := flag.Bool("verbose", false, "")
 
 	flag.Parse()
+
+	var logLevel = new(slog.LevelVar)
+	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
+	slog.SetDefault(slog.New(h))
+	if *verbose {
+		logLevel.Set(slog.LevelInfo)
+	} else {
+		logLevel.Set(slog.LevelWarn)
+	}
 
 	if err := validatePath(*dir); err != nil {
 		log.Fatal(err)
@@ -111,10 +124,46 @@ func deleteFiles(files []string) error {
 
 func buildTree(files []string) *vptree.VPTree {
 	var items []vptree.Item
-	for i, f := range files {
-		img, _ := utils.LoadImage(f)
-		dhash := dhash.New(img)
-		item := vptree.Item{ID: uint(i), Hash: dhash}
+	var wg sync.WaitGroup
+
+	nWorkers := 2
+	itemID := 1
+	// work := make(chan image.Image)
+	work := make(chan string)
+	results := make(chan vptree.Item)
+
+	// Spin up nWorkers to process images concurrently
+	for i := 0; i < nWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for f := range work {
+				img, err := utils.LoadImage(f)
+				if err != nil {
+					slog.Error("error loading image", "file", f, "error", err)
+				} else {
+					dhash := dhash.New(img)
+					slog.Info("computed image hash", "file", f, "hash", dhash)
+					item := vptree.Item{ID: uint(itemID), Hash: dhash}
+					itemID++
+					results <- item
+				}
+			}
+		}()
+	}
+
+	// Handle shifting images onto the worker queue and synchronizing
+	go func() {
+		for _, f := range files {
+			work <- f
+		}
+		close(work)
+		wg.Wait()
+		close(results)
+	}()
+
+	slog.Info("gathering image hashes", "imageCount", len(files))
+	for item := range results {
 		items = append(items, item)
 	}
 	return vptree.New(items)

@@ -1,6 +1,7 @@
 package dhash
 
 import (
+	"fmt"
 	"image"
 	"math/bits"
 )
@@ -10,6 +11,10 @@ import (
 type DHash struct {
 	row    uint64
 	column uint64
+}
+
+func (d *DHash) String() string {
+	return fmt.Sprintf("0x%x%x", d.row, d.column)
 }
 
 func New(img image.Image) *DHash {
