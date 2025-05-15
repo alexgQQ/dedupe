@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sync"
 )
@@ -41,34 +42,55 @@ func validatePath(path string) error {
 }
 
 func main() {
-	dir := flag.String("target", "images", "target image directory")
-	recursive := flag.Bool("recursive", true, "")
-	output := flag.String("output", "stdout", "")
-	delete := flag.Bool("delete", false, "")
-	move := flag.Bool("move", false, "")
-	verbose := flag.Bool("verbose", false, "")
+	var target string
+	var output string
+	var recursive bool
+	var verbose bool
+	var move bool
+	var delete bool
+
+	flag.StringVar(&target, "target", "", "The directory to search for image duplicates")
+	flag.StringVar(&target, "t", "", "alias for -target")
+
+	flag.StringVar(&output, "output", "stdout", "Set to a file for a csv output, otherwise it goes to stdout")
+	flag.StringVar(&output, "o", "stdout", "alias for -output")
+
+	flag.BoolVar(&recursive, "recursive", false, "Search for images in subdirectories of the target directory")
+	flag.BoolVar(&recursive, "r", false, "alias for -recursive")
+
+	flag.BoolVar(&verbose, "verbose", false, "Run application with info logging")
+	flag.BoolVar(&verbose, "v", false, "alias for -verbose")
+
+	flag.BoolVar(&move, "move", false, "Move duplicate images to a `duplicates` directory under the target directory")
+	flag.BoolVar(&move, "m", false, "alias for -move")
+
+	flag.BoolVar(&delete, "delete", false, "Delete duplicate images")
+	flag.BoolVar(&delete, "d", false, "alias for -delete")
 
 	flag.Parse()
 
 	var logLevel = new(slog.LevelVar)
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
 	slog.SetDefault(slog.New(h))
-	if *verbose {
+	if verbose {
 		logLevel.Set(slog.LevelInfo)
 	} else {
 		logLevel.Set(slog.LevelWarn)
 	}
 
-	if err := validatePath(*dir); err != nil {
-		slog.Error("Invalid target path", "path", *dir, "error", err)
+	if target == "" {
+		slog.Error("No target directory provided")
+		os.Exit(1)
+	} else if err := validatePath(target); err != nil {
+		slog.Error("Invalid target path", "path", target, "error", err)
 		os.Exit(1)
 	}
-	files := utils.FindImages(*dir, *recursive)
+	files := utils.FindImages(target, recursive)
 	if len(files) < 1 {
-		slog.Error("No images found at target path", "path", *dir)
+		slog.Error("No images found at target path", "path", target)
 		os.Exit(1)
 	}
-	target, _ := filepath.Abs(*dir)
+	target, _ = filepath.Abs(target)
 
 	fmt.Printf("Scanning %s for duplicate images...\n", target)
 	duplicates, total, err := findDuplicates(files)
@@ -82,10 +104,10 @@ func main() {
 	}
 	fmt.Printf("%d duplicate images found:\n", total)
 	var w *csv.Writer
-	if *output == "stdout" {
+	if output == "stdout" {
 		w = csv.NewWriter(os.Stdout)
 	} else {
-		path, _ := filepath.Abs(*output)
+		path, _ := filepath.Abs(output)
 		file, err := os.OpenFile(path, os.O_RDWR, 0666)
 		if errors.Is(err, os.ErrNotExist) {
 			file, _ = os.Create(path)
@@ -100,11 +122,11 @@ func main() {
 	}
 	w.Flush()
 
-	if *move {
+	if move {
 		for _, files := range duplicates {
-			moveFiles(files, *dir)
+			moveFiles(files, target)
 		}
-	} else if *delete {
+	} else if delete {
 		for _, files := range duplicates {
 			deleteFiles(files)
 		}
@@ -133,7 +155,9 @@ func buildTree(files []string) *vptree.VPTree {
 	var items []vptree.Item
 	var wg sync.WaitGroup
 
-	nWorkers := 2
+	// Lets start with allocating available cpu as the worker count
+	// it's hard to say what could be optimal outside of that
+	nWorkers := runtime.NumCPU()
 	itemID := 0
 	work := make(chan string)
 	results := make(chan vptree.Item)
@@ -168,7 +192,7 @@ func buildTree(files []string) *vptree.VPTree {
 		close(results)
 	}()
 
-	slog.Info("Gathering image hashes", "count", len(files))
+	slog.Info("Gathering image hashes", "imageCount", len(files), "workerCount", nWorkers)
 	for item := range results {
 		items = append(items, item)
 	}
@@ -178,7 +202,8 @@ func buildTree(files []string) *vptree.VPTree {
 func findDuplicates(files []string) ([][]string, int, error) {
 	tree := buildTree(files)
 	duplicates := make(map[uint][]uint)
-	threshold := 22.0
+	// This is a bit of an arbitrary number, most duplicates will have a very low distance metric but let's cast a wide net
+	threshold := 10.0
 
 	for _, item := range tree.Items() {
 		found, dist := tree.Within(item, threshold)
