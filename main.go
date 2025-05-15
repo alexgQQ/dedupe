@@ -4,6 +4,8 @@ import (
 	"dedupe/dhash"
 	"dedupe/utils"
 	"dedupe/vptree"
+	"encoding/csv"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -40,6 +42,9 @@ func validatePath(path string) error {
 func main() {
 	dir := flag.String("target", "images", "target image directory")
 	recursive := flag.Bool("recursive", true, "")
+	output := flag.String("output", "stdout", "")
+	delete := flag.Bool("delete", false, "")
+	move := flag.Bool("move", false, "")
 
 	flag.Parse()
 
@@ -51,29 +56,76 @@ func main() {
 		log.Fatal("no images found")
 	}
 
-	if err := run(files); err != nil {
+	duplicates, err := findDuplicates(files)
+	if err != nil {
 		log.Fatal(err)
+	}
+
+	var w *csv.Writer
+	if *output == "stdout" {
+		w = csv.NewWriter(os.Stdout)
+	} else {
+		path, _ := filepath.Abs(*output)
+		file, err := os.OpenFile(path, os.O_RDWR, 0666)
+		if errors.Is(err, os.ErrNotExist) {
+			file, _ = os.Create(path)
+		}
+		w = csv.NewWriter(file)
+	}
+
+	for _, group := range duplicates {
+		if err := w.Write(group); err != nil {
+			log.Fatalln("error writing record to csv:", err)
+		}
+	}
+	w.Flush()
+
+	if *move {
+		for _, files := range duplicates {
+			moveFiles(files, *dir)
+		}
+	} else if *delete {
+		for _, files := range duplicates {
+			deleteFiles(files)
+		}
 	}
 }
 
-func run(files []string) error {
-	var items []vptree.Item
-	duplicates := make(map[uint][]uint)
+func moveFiles(files []string, dir string) error {
+	dupeDir := filepath.Join(dir, "duplicates")
+	os.Mkdir(dupeDir, 0750)
+	for _, src := range files {
+		filename := filepath.Base(src)
+		dst := filepath.Join(dir, "duplicates", filename)
+		os.Rename(src, dst)
+	}
+	return nil
+}
 
+func deleteFiles(files []string) error {
+	for _, src := range files {
+		os.Remove(src)
+	}
+	return nil
+}
+
+func buildTree(files []string) *vptree.VPTree {
+	var items []vptree.Item
 	for i, f := range files {
 		img, _ := utils.LoadImage(f)
 		dhash := dhash.New(img)
 		item := vptree.Item{ID: uint(i), Hash: dhash}
 		items = append(items, item)
 	}
+	return vptree.New(items)
+}
 
-	tmp := make([]vptree.Item, len(items))
-	copy(tmp, items)
-	// The incoming slice can be changed when building the tree
-	tree := *vptree.New(tmp)
+func findDuplicates(files []string) ([][]string, error) {
+	tree := buildTree(files)
+	duplicates := make(map[uint][]uint)
 	threshold := 22.0
 
-	for _, item := range items {
+	for _, item := range tree.Items() {
 		found, dist := tree.Within(item, threshold)
 		if len(found) == 0 && len(dist) == 0 {
 			continue
@@ -105,13 +157,5 @@ func run(files []string) error {
 		filegroups = append(filegroups, filenames)
 	}
 
-	for i, group := range filegroups {
-		fmt.Printf("%d\t", i)
-		for _, filename := range group {
-			fmt.Printf("%s, ", filename)
-		}
-		fmt.Println("")
-	}
-
-	return nil
+	return filegroups, nil
 }

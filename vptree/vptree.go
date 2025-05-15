@@ -38,6 +38,24 @@ func New(items []Item) *VPTree {
 	return t
 }
 
+func (vp *VPTree) Items() []Item {
+	var items []Item
+	var traverse func(n *Node)
+
+	traverse = func(n *Node) {
+		items = append(items, n.Item)
+		if n.Left != nil {
+			traverse(n.Left)
+		}
+		if n.Right != nil {
+			traverse(n.Right)
+		}
+	}
+
+	traverse(vp.root)
+	return items
+}
+
 func (vp *VPTree) Search(target Item, k int) ([]Item, []float64) {
 	var results []Item
 	var distances []float64
