@@ -8,7 +8,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -42,7 +41,6 @@ func validatePath(path string) error {
 }
 
 func main() {
-	// dir := flag.String("target", "wallpapers", "target image directory")
 	dir := flag.String("target", "images", "target image directory")
 	recursive := flag.Bool("recursive", true, "")
 	output := flag.String("output", "stdout", "")
@@ -62,18 +60,27 @@ func main() {
 	}
 
 	if err := validatePath(*dir); err != nil {
-		log.Fatal(err)
+		slog.Error("Invalid target path", "path", *dir, "error", err)
+		os.Exit(1)
 	}
 	files := utils.FindImages(*dir, *recursive)
 	if len(files) < 1 {
-		log.Fatal("no images found")
+		slog.Error("No images found at target path", "path", *dir)
+		os.Exit(1)
 	}
+	target, _ := filepath.Abs(*dir)
 
-	duplicates, err := findDuplicates(files)
+	fmt.Printf("Scanning %s for duplicate images...\n", target)
+	duplicates, total, err := findDuplicates(files)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Error occurred while finding duplicates", "error", err)
+		os.Exit(1)
 	}
-
+	if total == 0 {
+		fmt.Print("No duplicate images found")
+		os.Exit(0)
+	}
+	fmt.Printf("%d duplicate images found:\n", total)
 	var w *csv.Writer
 	if *output == "stdout" {
 		w = csv.NewWriter(os.Stdout)
@@ -88,7 +95,7 @@ func main() {
 
 	for _, group := range duplicates {
 		if err := w.Write(group); err != nil {
-			log.Fatalln("error writing record to csv:", err)
+			slog.Error("Error writing record to csv", "error", err)
 		}
 	}
 	w.Flush()
@@ -127,8 +134,7 @@ func buildTree(files []string) *vptree.VPTree {
 	var wg sync.WaitGroup
 
 	nWorkers := 2
-	itemID := 1
-	// work := make(chan image.Image)
+	itemID := 0
 	work := make(chan string)
 	results := make(chan vptree.Item)
 
@@ -140,10 +146,10 @@ func buildTree(files []string) *vptree.VPTree {
 			for f := range work {
 				img, err := utils.LoadImage(f)
 				if err != nil {
-					slog.Error("error loading image", "file", f, "error", err)
+					slog.Error("Error loading image", "file", f, "error", err)
 				} else {
 					dhash := dhash.New(img)
-					slog.Info("computed image hash", "file", f, "hash", dhash)
+					slog.Info("Computed image hash", "file", f, "hash", dhash)
 					item := vptree.Item{ID: uint(itemID), Hash: dhash}
 					itemID++
 					results <- item
@@ -162,14 +168,14 @@ func buildTree(files []string) *vptree.VPTree {
 		close(results)
 	}()
 
-	slog.Info("gathering image hashes", "imageCount", len(files))
+	slog.Info("Gathering image hashes", "count", len(files))
 	for item := range results {
 		items = append(items, item)
 	}
 	return vptree.New(items)
 }
 
-func findDuplicates(files []string) ([][]string, error) {
+func findDuplicates(files []string) ([][]string, int, error) {
 	tree := buildTree(files)
 	duplicates := make(map[uint][]uint)
 	threshold := 22.0
@@ -179,6 +185,7 @@ func findDuplicates(files []string) ([][]string, error) {
 		if len(found) == 0 && len(dist) == 0 {
 			continue
 		}
+		slog.Info("VPTree found results within an item", "item", item, "found", found, "dist", dist, "threshold", threshold)
 		var ids []uint
 		for _, r := range found {
 			ids = append(ids, r.ID)
@@ -188,6 +195,8 @@ func findDuplicates(files []string) ([][]string, error) {
 
 	var skip []uint
 	var filegroups [][]string
+	total := 0
+	// Make unique arrays of the found duplicates
 	for key, value := range duplicates {
 		if slices.Contains(skip, key) {
 			continue
@@ -200,11 +209,13 @@ func findDuplicates(files []string) ([][]string, error) {
 		}
 		slices.Sort(group)
 		group = slices.Compact(group)
+		total += len(group)
 		for _, g := range group {
 			filenames = append(filenames, files[g])
 		}
 		filegroups = append(filegroups, filenames)
 	}
+	slog.Info("Duplicate images found", "count", total)
 
-	return filegroups, nil
+	return filegroups, total, nil
 }
