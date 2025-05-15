@@ -67,7 +67,10 @@ func run(files []string) error {
 		items = append(items, item)
 	}
 
-	tree := *vptree.New(items)
+	tmp := make([]vptree.Item, len(items))
+	copy(tmp, items)
+	// The incoming slice can be changed when building the tree
+	tree := *vptree.New(tmp)
 	threshold := 22.0
 
 	for _, item := range items {
