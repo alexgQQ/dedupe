@@ -35,7 +35,7 @@ jobs:
           -w /go/src/github.com/alexgQQ/go-image-deduper
           -e CGO_ENABLED=1
           docker.elastic.co/beats-dev/golang-crossbuild:${CONTAINER}
-          --build-cmd "go build -ldflags '-s -w' -o dedupe.windows-${ARCH}"
+          --build-cmd "go build -ldflags '-s -w' -o dedupe.windows-${ARCH}.exe"
           -p windows/${ARCH}
 
       - name: create new release
