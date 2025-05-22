@@ -16,6 +16,35 @@ import (
 	"sync"
 )
 
+// This exists because when we deal with goroutines we need
+// a way to map the processed data back safely so this mutex
+// based container can track all of it
+
+type ItemMapper struct {
+	mu    sync.Mutex
+	count int
+	items []*vptree.Item
+}
+
+func (c *ItemMapper) addItem(item *vptree.Item) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	item.ID = uint(c.count)
+	c.items = append(c.items, item)
+	// such a minor detail but is it better to set this to the length
+	// or just increment
+	c.count++
+}
+
+func (c *ItemMapper) getItem(id uint) (*vptree.Item, error) {
+	if int(id) >= len(c.items) {
+		return nil, fmt.Errorf("integer %d is outside of item array", id)
+	}
+	return c.items[id], nil
+}
+
+var itemMap ItemMapper
+
 func validatePath(path string) error {
 	if path == "" {
 		return fmt.Errorf("path cannot be empty")
@@ -85,6 +114,11 @@ func main() {
 		slog.Error("Invalid target path", "path", target, "error", err)
 		os.Exit(1)
 	}
+	// It would be interesting to do this in an iterator pattern
+	// instead of loading a array of strings that could be potentially very large
+	// With more recent go version we can do some things like generator patterns
+	// in python
+	// check out the rabbit hole https://github.com/golang/go/issues/64341
 	files := utils.FindImages(target, recursive)
 	if len(files) < 1 {
 		slog.Error("No images found at target path", "path", target)
@@ -158,7 +192,6 @@ func buildTree(files []string) *vptree.VPTree {
 	// Lets start with allocating available cpu as the worker count
 	// it's hard to say what could be optimal outside of that
 	nWorkers := runtime.NumCPU()
-	itemID := 0
 	work := make(chan string)
 	results := make(chan vptree.Item)
 
@@ -174,8 +207,8 @@ func buildTree(files []string) *vptree.VPTree {
 				} else {
 					dhash := dhash.New(img)
 					slog.Info("Computed image hash", "file", f, "hash", dhash)
-					item := vptree.Item{ID: uint(itemID), Hash: dhash}
-					itemID++
+					item := vptree.Item{FilePath: f, Hash: dhash}
+					itemMap.addItem(&item)
 					results <- item
 				}
 			}
@@ -201,46 +234,48 @@ func buildTree(files []string) *vptree.VPTree {
 
 func findDuplicates(files []string) ([][]string, int, error) {
 	tree := buildTree(files)
-	duplicates := make(map[uint][]uint)
 	// This is a bit of an arbitrary number, most duplicates will have a very low distance metric but let's cast a wide net
 	threshold := 10.0
-
-	for _, item := range tree.Items() {
-		found, dist := tree.Within(item, threshold)
-		if len(found) == 0 && len(dist) == 0 {
-			continue
-		}
-		slog.Info("VPTree found results within an item", "item", item, "found", found, "dist", dist, "threshold", threshold)
-		var ids []uint
-		for _, r := range found {
-			ids = append(ids, r.ID)
-		}
-		duplicates[item.ID] = ids
-	}
-
+	total := 0
 	var skip []uint
 	var filegroups [][]string
-	total := 0
-	// Make unique arrays of the found duplicates
-	for key, value := range duplicates {
-		if slices.Contains(skip, key) {
+
+	for _, item := range tree.Items() {
+		var group []uint
+		if slices.Contains(skip, item.ID) {
 			continue
 		}
-		var filenames []string
-		var group []uint = value
-		for _, v := range value {
-			group = append(group, duplicates[v]...)
-			skip = append(skip, v)
+		found, dist := tree.Within(item, threshold)
+		if len(found) <= 0 {
+			continue
+		}
+		slog.Info("VPTree found results within item", "item", item, "results", found, "distances", dist, "threshold", threshold)
+		group = append(group, item.ID)
+
+		// I've gone back and forth with myself on this
+		// do I need to do this reciprocal search?
+		// Basically anything subsequently found here would be at max
+		// 2x the threshold from the first item, which isn't necessarily wrong
+		for _, i := range found {
+			group = append(group, i.ID)
+			f, d := tree.Within(i, threshold)
+			for _, F := range f {
+				group = append(group, F.ID)
+			}
+			slog.Info("VPTree found results within item", "item", item, "results", f, "distances", d, "threshold", threshold)
 		}
 		slices.Sort(group)
 		group = slices.Compact(group)
 		total += len(group)
-		for _, g := range group {
-			filenames = append(filenames, files[g])
+
+		var paths []string
+		for _, id := range group {
+			item, _ := itemMap.getItem(id)
+			paths = append(paths, item.FilePath)
 		}
-		filegroups = append(filegroups, filenames)
+		filegroups = append(filegroups, paths)
+		skip = append(skip, group...)
 	}
-	slog.Info("Duplicate images found", "count", total)
 
 	return filegroups, total, nil
 }

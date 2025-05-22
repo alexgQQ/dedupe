@@ -8,8 +8,9 @@ import (
 )
 
 type Item struct {
-	ID   uint
-	Hash *dhash.DHash
+	FilePath string
+	ID       uint
+	Hash     *dhash.DHash
 }
 
 type Node struct {
@@ -96,10 +97,11 @@ func (vp *VPTree) Within(target Item, radius float64) ([]Item, []float64) {
 		}
 	}
 
-	for i, j := 0, len(results)-1; i < j; i, j = i+1, j-1 {
-		results[i], results[j] = results[j], results[i]
-		distances[i], distances[j] = distances[j], distances[i]
-	}
+	// For my use case I don't think I even need these sorted
+	// for i, j := 0, len(results)-1; i < j; i, j = i+1, j-1 {
+	// 	results[i], results[j] = results[j], results[i]
+	// 	distances[i], distances[j] = distances[j], distances[i]
+	// }
 	return results, distances
 }
 
