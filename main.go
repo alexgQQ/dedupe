@@ -1,7 +1,8 @@
 package main
 
 import (
-	"dedupe/dhash"
+	// "dedupe/dhash"
+	"dedupe/phash"
 	"dedupe/utils"
 	"dedupe/vptree"
 	"encoding/csv"
@@ -11,7 +12,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
+
+	// "runtime"
 	"slices"
 	"sync"
 )
@@ -120,6 +122,7 @@ func main() {
 	// in python
 	// check out the rabbit hole https://github.com/golang/go/issues/64341
 	files := utils.FindImages(target, recursive)
+	// TODO: this fails to find images when the root is a nested dir
 	if len(files) < 1 {
 		slog.Error("No images found at target path", "path", target)
 		os.Exit(1)
@@ -191,7 +194,8 @@ func buildTree(files []string) *vptree.VPTree {
 
 	// Lets start with allocating available cpu as the worker count
 	// it's hard to say what could be optimal outside of that
-	nWorkers := runtime.NumCPU()
+	// nWorkers := runtime.NumCPU()
+	nWorkers := 4
 	work := make(chan string)
 	results := make(chan vptree.Item)
 
@@ -205,9 +209,10 @@ func buildTree(files []string) *vptree.VPTree {
 				if err != nil {
 					slog.Error("Error loading image", "file", f, "error", err)
 				} else {
-					dhash := dhash.New(img)
-					slog.Info("Computed image hash", "file", f, "hash", dhash)
-					item := vptree.Item{FilePath: f, Hash: dhash}
+					// hash := dhash.New(img)
+					hash := phash.DCT(img)
+					slog.Info("Computed image hash", "file", f, "hash", hash)
+					item := vptree.Item{FilePath: f, Hash: hash}
 					itemMap.addItem(&item)
 					results <- item
 				}
@@ -235,7 +240,7 @@ func buildTree(files []string) *vptree.VPTree {
 func findDuplicates(files []string) ([][]string, int, error) {
 	tree := buildTree(files)
 	// This is a bit of an arbitrary number, most duplicates will have a very low distance metric but let's cast a wide net
-	threshold := 10.0
+	threshold := 20.0
 	total := 0
 	var skip []uint
 	var filegroups [][]string
@@ -264,6 +269,9 @@ func findDuplicates(files []string) ([][]string, int, error) {
 			}
 			slog.Info("VPTree found results within item", "item", item, "results", f, "distances", d, "threshold", threshold)
 		}
+		// for _, i := range found {
+		// 	group = append(group, i.ID)
+		// }
 		slices.Sort(group)
 		group = slices.Compact(group)
 		total += len(group)

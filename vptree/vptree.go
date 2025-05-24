@@ -2,7 +2,9 @@ package vptree
 
 import (
 	"container/heap"
-	"dedupe/dhash"
+	// "dedupe/dhash"
+
+	"dedupe/phash"
 	"math"
 	"math/rand"
 )
@@ -10,7 +12,8 @@ import (
 type Item struct {
 	FilePath string
 	ID       uint
-	Hash     *dhash.DHash
+	// Hash     *dhash.DHash
+	Hash uint64
 }
 
 type Node struct {
@@ -26,7 +29,8 @@ type QueueItem struct {
 }
 
 func distance(a, b Item) float64 {
-	return float64(dhash.Hamming(a.Hash, b.Hash))
+	// return float64(dhash.Hamming(a.Hash, b.Hash))
+	return float64(phash.Hamming(a.Hash, b.Hash))
 }
 
 type VPTree struct {
