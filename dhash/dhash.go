@@ -1,10 +1,10 @@
 package dhash
 
 import (
+	"dedupe/utils"
 	"fmt"
 	"image"
 	"math/bits"
-	"github.com/kovidgoyal/imaging"
 )
 
 // The method for getting a dhash is outlined here https://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html
@@ -27,7 +27,7 @@ func New(img image.Image) *DHash {
 	// however I do not want to use a fork of a popular imaging library
 	// so I'll want to port that code over
 	size := 9
-	img = imaging.Resize(img, 9, 9, imaging.Lanczos)
+	img = utils.Resize(img, 9, 9, utils.Lanczos)
 
 	// vals := make([]float64, size*size)
 	var segments [9][9]float64
@@ -84,7 +84,7 @@ func NewFromValues(row uint64, col uint64) *DHash {
 }
 
 func ham(a, b uint64) int {
-	return bits.OnesCount64(a^b)
+	return bits.OnesCount64(a ^ b)
 }
 
 func (a *DHash) Hamming(b *DHash) int {

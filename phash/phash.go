@@ -2,13 +2,16 @@ package phash
 
 // port from https://ironchef-team21.googlecode.com/git-history/75856e07bb89645d0e56820d6e79f8219a06bfb7/ironchef_team21/src/ImagePHash.java
 
+// This is in turn ported from https://github.com/azr/phash/blob/main/dtc.go
+// I initially used it as a quick test so it may be worht refactoring
+// but it works for now and that's enough
+
 import (
+	"dedupe/utils"
 	"image"
 	"math"
 	"math/bits"
 	"sort"
-
-	"github.com/kovidgoyal/imaging"
 )
 
 var (
@@ -17,7 +20,7 @@ var (
 )
 
 type PHash struct {
-	value    uint64
+	value uint64
 }
 
 // DTC computes the perceptual hash for img using phash dtc image
@@ -42,7 +45,7 @@ func New(img image.Image) *PHash {
 	// the image is larger than 8x8; 32x32 is a good size. This is
 	// really done to simplify the DCT computation and not because it
 	// is needed to reduce the high frequencies.
-	im := imaging.Resize(img, size, size, imaging.Lanczos)
+	im := utils.Resize(img, size, size, utils.Lanczos)
 
 	// 2. Reduce color.
 	// The image is reduced to a grayscale just to further simplify
@@ -141,7 +144,7 @@ func New(img image.Image) *PHash {
 }
 
 func ham(a, b uint64) int {
-	return bits.OnesCount64(a^b)
+	return bits.OnesCount64(a ^ b)
 }
 
 func (a *PHash) Hamming(b *PHash) int {
