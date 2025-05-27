@@ -3,10 +3,17 @@ package hash
 import (
 	"dedupe/utils"
 	"image"
+	"image/color"
 	"math"
 	"math/bits"
 	"sort"
 )
+
+// Convert to greyscale with the luminosity approximation
+func colorToGrey(c color.Color) float64 {
+	r, g, b, _ := c.RGBA()
+	return 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)
+}
 
 // The method for getting a dhash is outlined here https://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html
 
@@ -20,9 +27,7 @@ func Dhash(img image.Image) (uint64, uint64) {
 	var segments [9][9]float64
 	for i := 0; i < size; i++ {
 		for j := 0; j < size; j++ {
-			r, g, b, _ := img.At(i, j).RGBA()
-			// Grayscale by averaging, I wonder if doing it by weights/luminosity has any meaningful impact
-			segments[i][j] = float64((r + g + b) / 3)
+			segments[i][j] = colorToGrey(img.At(i, j))
 		}
 	}
 
@@ -81,9 +86,7 @@ func DCT(img image.Image) uint64 {
 	vals := make([]float64, size*size)
 	for i := 0; i < size; i++ {
 		for j := 0; j < size; j++ {
-			// vals[size*i+j] = colorToGreyScaleFloat64(im.At(i, j))
-			r, g, b, _ := im.At(i, j).RGBA()
-			vals[size*i+j] = float64((r + g + b) / 3)
+			vals[size*i+j] = colorToGrey(im.At(i, j))
 		}
 	}
 
