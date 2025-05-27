@@ -41,7 +41,7 @@ func FindImages(root string, subdirs bool) []string {
 		if matchesAnyExt(d.Name(), ext) {
 			images = append(images, s)
 		}
-		if !subdirs && root != d.Name() && d.IsDir() {
+		if !subdirs && root != s && d.IsDir() {
 			return fs.SkipDir
 		}
 		return nil
