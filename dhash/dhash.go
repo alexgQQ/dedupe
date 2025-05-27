@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image"
 	"math/bits"
-
 	"github.com/kovidgoyal/imaging"
 )
 
@@ -84,6 +83,10 @@ func NewFromValues(row uint64, col uint64) *DHash {
 	return &DHash{row, col}
 }
 
-func Hamming(dhash1 *DHash, dhash2 *DHash) int {
-	return bits.OnesCount64(dhash1.row^dhash2.row) + bits.OnesCount64(dhash1.column^dhash2.column)
+func ham(a, b uint64) int {
+	return bits.OnesCount64(a^b)
+}
+
+func (a *DHash) Hamming(b *DHash) int {
+	return ham(a.row, b.row) + ham(a.column, b.column)
 }

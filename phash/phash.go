@@ -16,6 +16,10 @@ var (
 	dtcSize    = 8
 )
 
+type PHash struct {
+	value    uint64
+}
+
 // DTC computes the perceptual hash for img using phash dtc image
 // technique.
 //
@@ -25,9 +29,9 @@ var (
 //  4. Reduce the DCT to 8x8 in order to keep high frequencies.
 //  5. Compute the median value of 8x8 dtc.
 //  6. Further reduce the DCT into an uint64.
-func DCT(img image.Image) (phash uint64) {
+func New(img image.Image) *PHash {
 	if img == nil {
-		return
+		return nil
 	}
 
 	size := dtcSizeBig
@@ -127,14 +131,19 @@ func DCT(img image.Image) (phash uint64) {
 	// the image remains the same; this will survive gamma and color
 	// histogram adjustments without a problem.
 
+	var phash uint64
 	for n, e := range vals {
 		if e > median { // when frequency is higher than median
 			phash ^= (1 << uint64(n)) // set nth bit to one
 		}
 	}
-	return phash
+	return &PHash{value: phash}
 }
 
-func Hamming(hash1 uint64, hash2 uint64) int {
-	return bits.OnesCount64(hash1 ^ hash2)
+func ham(a, b uint64) int {
+	return bits.OnesCount64(a^b)
+}
+
+func (a *PHash) Hamming(b *PHash) int {
+	return ham(a.value, b.value)
 }

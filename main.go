@@ -1,7 +1,7 @@
 package main
 
 import (
-	// "dedupe/dhash"
+	"dedupe/dhash"
 	"dedupe/phash"
 	"dedupe/utils"
 	"dedupe/vptree"
@@ -188,7 +188,7 @@ func deleteFiles(files []string) error {
 	return nil
 }
 
-func buildTree(files []string) *vptree.VPTree {
+func buildTree(files []string, hashType string) *vptree.VPTree {
 	var items []vptree.Item
 	var wg sync.WaitGroup
 
@@ -209,10 +209,15 @@ func buildTree(files []string) *vptree.VPTree {
 				if err != nil {
 					slog.Error("Error loading image", "file", f, "error", err)
 				} else {
-					// hash := dhash.New(img)
-					hash := phash.DCT(img)
-					slog.Info("Computed image hash", "file", f, "hash", hash)
-					item := vptree.Item{FilePath: f, Hash: hash}
+					item := vptree.Item{FilePath: f}
+					if hashType == "phash" {
+						hash := phash.New(img)
+						item.Phash = hash
+					} else {
+						hash := dhash.New(img)
+						item.Dhash = hash
+					}
+					// slog.Info("Computed image hash", "file", f, "hash", hash)
 					itemMap.addItem(&item)
 					results <- item
 				}
@@ -238,7 +243,7 @@ func buildTree(files []string) *vptree.VPTree {
 }
 
 func findDuplicates(files []string) ([][]string, int, error) {
-	tree := buildTree(files)
+	tree := buildTree(files, "dhash")
 	// This is a bit of an arbitrary number, most duplicates will have a very low distance metric but let's cast a wide net
 	threshold := 20.0
 	total := 0
