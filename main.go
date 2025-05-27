@@ -12,8 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-
-	// "runtime"
+	"runtime"
 	"slices"
 	"sync"
 )
@@ -192,10 +191,8 @@ func buildTree(files []string, hashType string) *vptree.VPTree {
 	var items []vptree.Item
 	var wg sync.WaitGroup
 
-	// Lets start with allocating available cpu as the worker count
-	// it's hard to say what could be optimal outside of that
-	// nWorkers := runtime.NumCPU()
-	nWorkers := 4
+	// By default this will be the runtime.NumCPU but will be GOMAXPROCS if set in the environment
+	nWorkers := runtime.GOMAXPROCS(0)
 	work := make(chan string)
 	results := make(chan vptree.Item)
 
