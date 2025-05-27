@@ -77,6 +77,7 @@ func main() {
 	var verbose bool
 	var move bool
 	var delete bool
+	var hashType string
 
 	flag.StringVar(&target, "target", "", "The directory to search for image duplicates")
 	flag.StringVar(&target, "t", "", "alias for -target")
@@ -95,6 +96,8 @@ func main() {
 
 	flag.BoolVar(&delete, "delete", false, "Delete duplicate images")
 	flag.BoolVar(&delete, "d", false, "alias for -delete")
+
+	flag.StringVar(&hashType, "hash", "dhash", "Which type of hash to use for searching. Can be either 'dhash' or 'dct")
 
 	flag.Parse()
 
@@ -128,7 +131,7 @@ func main() {
 	target, _ = filepath.Abs(target)
 
 	fmt.Printf("Scanning %s for duplicate images...\n", target)
-	duplicates, total, err := findDuplicates(files)
+	duplicates, total, err := findDuplicates(files, hashType)
 	if err != nil {
 		slog.Error("Error occurred while finding duplicates", "error", err)
 		os.Exit(1)
@@ -242,8 +245,8 @@ func buildTree(files []string, hashType string) *vptree.VPTree {
 	return vptree.New(items)
 }
 
-func findDuplicates(files []string) ([][]string, int, error) {
-	tree := buildTree(files, "dhash")
+func findDuplicates(files []string, hashType string) ([][]string, int, error) {
+	tree := buildTree(files, hashType)
 	// This is a bit of an arbitrary number, most duplicates will have a very low distance metric but let's cast a wide net
 	threshold := 20.0
 	total := 0

@@ -387,10 +387,10 @@ func Resize(img image.Image, width, height int, filter ResampleFilter) *image.NR
 	// 	return Clone(img)
 	// }
 
-	// if filter.Support <= 0 {
-	// 	// Nearest-neighbor special case.
-	// 	return resizeNearest(img, dstW, dstH)
-	// }
+	if filter.Support <= 0 {
+		// Nearest-neighbor special case.
+		return resizeNearest(img, dstW, dstH)
+	}
 
 	if srcW != dstW && srcH != dstH {
 		return resizeVertical(resizeHorizontal(img, dstW, filter), dstH, filter)
@@ -524,45 +524,88 @@ func resizeVertical(img image.Image, height int, filter ResampleFilter) *image.N
 	return dst
 }
 
+// Clone returns a copy of the given image.
+func Clone(img image.Image) *image.NRGBA {
+	src := newScanner(img)
+	dst := image.NewNRGBA(image.Rect(0, 0, src.w, src.h))
+	size := src.w * 4
+	for y := 0; y < src.h; y++ {
+		i := y * dst.Stride
+		src.scan(0, y, src.w, y+1, dst.Pix[i:i+size])
+	}
+	return dst
+}
+
+func toNRGBA(img image.Image) *image.NRGBA {
+	if img, ok := img.(*image.NRGBA); ok {
+		return &image.NRGBA{
+			Pix:    img.Pix,
+			Stride: img.Stride,
+			Rect:   img.Rect.Sub(img.Rect.Min),
+		}
+	}
+	return Clone(img)
+}
+
 // There is only one resample filter that uses this and I'm not sure if I'll use it
 // resizeNearest is a fast nearest-neighbor resize, no filtering.
-// func resizeNearest(img image.Image, width, height int) *image.NRGBA {
-// 	dst := image.NewNRGBA(image.Rect(0, 0, width, height))
-// 	dx := float64(img.Bounds().Dx()) / float64(width)
-// 	dy := float64(img.Bounds().Dy()) / float64(height)
+func resizeNearest(img image.Image, width, height int) *image.NRGBA {
+	dst := image.NewNRGBA(image.Rect(0, 0, width, height))
+	dx := float64(img.Bounds().Dx()) / float64(width)
+	dy := float64(img.Bounds().Dy()) / float64(height)
 
-// 	if dx > 1 && dy > 1 {
-// 		src := newScanner(img)
-// 		parallel(0, height, func(ys <-chan int) {
-// 			for y := range ys {
-// 				srcY := int((float64(y) + 0.5) * dy)
-// 				dstOff := y * dst.Stride
-// 				for x := 0; x < width; x++ {
-// 					srcX := int((float64(x) + 0.5) * dx)
-// 					src.scan(srcX, srcY, srcX+1, srcY+1, dst.Pix[dstOff:dstOff+4])
-// 					dstOff += 4
-// 				}
-// 			}
-// 		})
-// 	} else {
-// 		src := toNRGBA(img)
-// 		parallel(0, height, func(ys <-chan int) {
-// 			for y := range ys {
-// 				srcY := int((float64(y) + 0.5) * dy)
-// 				srcOff0 := srcY * src.Stride
-// 				dstOff := y * dst.Stride
-// 				for x := 0; x < width; x++ {
-// 					srcX := int((float64(x) + 0.5) * dx)
-// 					srcOff := srcOff0 + srcX*4
-// 					copy(dst.Pix[dstOff:dstOff+4], src.Pix[srcOff:srcOff+4])
-// 					dstOff += 4
-// 				}
-// 			}
-// 		})
-// 	}
+	if dx > 1 && dy > 1 {
+		src := newScanner(img)
+		for y := 0; y < height; y++ {
+			srcY := int((float64(y) + 0.5) * dy)
+			dstOff := y * dst.Stride
+			for x := 0; x < width; x++ {
+				srcX := int((float64(x) + 0.5) * dx)
+				src.scan(srcX, srcY, srcX+1, srcY+1, dst.Pix[dstOff:dstOff+4])
+				dstOff += 4
+			}
+		}
+		// parallel(0, height, func(ys <-chan int) {
+		// 	for y := range ys {
+		// 		srcY := int((float64(y) + 0.5) * dy)
+		// 		dstOff := y * dst.Stride
+		// 		for x := 0; x < width; x++ {
+		// 			srcX := int((float64(x) + 0.5) * dx)
+		// 			src.scan(srcX, srcY, srcX+1, srcY+1, dst.Pix[dstOff:dstOff+4])
+		// 			dstOff += 4
+		// 		}
+		// 	}
+		// })
+	} else {
+		src := toNRGBA(img)
+		for y := 0; y < height; y++ {
+			srcY := int((float64(y) + 0.5) * dy)
+			srcOff0 := srcY * src.Stride
+			dstOff := y * dst.Stride
+			for x := 0; x < width; x++ {
+				srcX := int((float64(x) + 0.5) * dx)
+				srcOff := srcOff0 + srcX*4
+				copy(dst.Pix[dstOff:dstOff+4], src.Pix[srcOff:srcOff+4])
+				dstOff += 4
+			}
+		}
+		// parallel(0, height, func(ys <-chan int) {
+		// 	for y := range ys {
+		// 		srcY := int((float64(y) + 0.5) * dy)
+		// 		srcOff0 := srcY * src.Stride
+		// 		dstOff := y * dst.Stride
+		// 		for x := 0; x < width; x++ {
+		// 			srcX := int((float64(x) + 0.5) * dx)
+		// 			srcOff := srcOff0 + srcX*4
+		// 			copy(dst.Pix[dstOff:dstOff+4], src.Pix[srcOff:srcOff+4])
+		// 			dstOff += 4
+		// 		}
+		// 	}
+		// })
+	}
 
-// 	return dst
-// }
+	return dst
+}
 
 // ResampleFilter specifies a resampling filter to be used for image resizing.
 //
@@ -592,49 +635,49 @@ type ResampleFilter struct {
 }
 
 // NearestNeighbor is a nearest-neighbor filter (no anti-aliasing).
-// var NearestNeighbor ResampleFilter
+var NearestNeighbor ResampleFilter
 
-// // Box filter (averaging pixels).
-// var Box ResampleFilter
+// Box filter (averaging pixels).
+var Box ResampleFilter
 
-// // Linear filter.
-// var Linear ResampleFilter
+// Linear filter.
+var Linear ResampleFilter
 
-// // Hermite cubic spline filter (BC-spline; B=0; C=0).
-// var Hermite ResampleFilter
+// Hermite cubic spline filter (BC-spline; B=0; C=0).
+var Hermite ResampleFilter
 
-// // MitchellNetravali is Mitchell-Netravali cubic filter (BC-spline; B=1/3; C=1/3).
-// var MitchellNetravali ResampleFilter
+// MitchellNetravali is Mitchell-Netravali cubic filter (BC-spline; B=1/3; C=1/3).
+var MitchellNetravali ResampleFilter
 
-// // CatmullRom is a Catmull-Rom - sharp cubic filter (BC-spline; B=0; C=0.5).
-// var CatmullRom ResampleFilter
+// CatmullRom is a Catmull-Rom - sharp cubic filter (BC-spline; B=0; C=0.5).
+var CatmullRom ResampleFilter
 
-// // BSpline is a smooth cubic filter (BC-spline; B=1; C=0).
-// var BSpline ResampleFilter
+// BSpline is a smooth cubic filter (BC-spline; B=1; C=0).
+var BSpline ResampleFilter
 
-// // Gaussian is a Gaussian blurring filter.
-// var Gaussian ResampleFilter
+// Gaussian is a Gaussian blurring filter.
+var Gaussian ResampleFilter
 
-// // Bartlett is a Bartlett-windowed sinc filter (3 lobes).
-// var Bartlett ResampleFilter
+// Bartlett is a Bartlett-windowed sinc filter (3 lobes).
+var Bartlett ResampleFilter
 
 // Lanczos filter (3 lobes).
 var Lanczos ResampleFilter
 
 // Hann is a Hann-windowed sinc filter (3 lobes).
-// var Hann ResampleFilter
+var Hann ResampleFilter
 
-// // Hamming is a Hamming-windowed sinc filter (3 lobes).
-// var Hamming ResampleFilter
+// Hamming is a Hamming-windowed sinc filter (3 lobes).
+var Hamming ResampleFilter
 
-// // Blackman is a Blackman-windowed sinc filter (3 lobes).
-// var Blackman ResampleFilter
+// Blackman is a Blackman-windowed sinc filter (3 lobes).
+var Blackman ResampleFilter
 
-// // Welch is a Welch-windowed sinc filter (parabolic window, 3 lobes).
-// var Welch ResampleFilter
+// Welch is a Welch-windowed sinc filter (parabolic window, 3 lobes).
+var Welch ResampleFilter
 
-// // Cosine is a Cosine-windowed sinc filter (3 lobes).
-// var Cosine ResampleFilter
+// Cosine is a Cosine-windowed sinc filter (3 lobes).
+var Cosine ResampleFilter
 
 func bcspline(x, b, c float64) float64 {
 	var y float64
@@ -657,97 +700,97 @@ func sinc(x float64) float64 {
 // This is the only init function in the package so it should run before main
 // but I need to look more into how to structure this or if I need to change anything
 func init() {
-	// NearestNeighbor = ResampleFilter{
-	// 	Support: 0.0, // special case - not applying the filter
-	// }
+	NearestNeighbor = ResampleFilter{
+		Support: 0.0, // special case - not applying the filter
+	}
 
-	// Box = ResampleFilter{
-	// 	Support: 0.5,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x <= 0.5 {
-	// 			return 1.0
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	Box = ResampleFilter{
+		Support: 0.5,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x <= 0.5 {
+				return 1.0
+			}
+			return 0
+		},
+	}
 
-	// Linear = ResampleFilter{
-	// 	Support: 1.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 1.0 {
-	// 			return 1.0 - x
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	Linear = ResampleFilter{
+		Support: 1.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 1.0 {
+				return 1.0 - x
+			}
+			return 0
+		},
+	}
 
-	// Hermite = ResampleFilter{
-	// 	Support: 1.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 1.0 {
-	// 			return bcspline(x, 0.0, 0.0)
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	Hermite = ResampleFilter{
+		Support: 1.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 1.0 {
+				return bcspline(x, 0.0, 0.0)
+			}
+			return 0
+		},
+	}
 
-	// MitchellNetravali = ResampleFilter{
-	// 	Support: 2.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 2.0 {
-	// 			return bcspline(x, 1.0/3.0, 1.0/3.0)
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	MitchellNetravali = ResampleFilter{
+		Support: 2.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 2.0 {
+				return bcspline(x, 1.0/3.0, 1.0/3.0)
+			}
+			return 0
+		},
+	}
 
-	// CatmullRom = ResampleFilter{
-	// 	Support: 2.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 2.0 {
-	// 			return bcspline(x, 0.0, 0.5)
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	CatmullRom = ResampleFilter{
+		Support: 2.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 2.0 {
+				return bcspline(x, 0.0, 0.5)
+			}
+			return 0
+		},
+	}
 
-	// BSpline = ResampleFilter{
-	// 	Support: 2.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 2.0 {
-	// 			return bcspline(x, 1.0, 0.0)
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	BSpline = ResampleFilter{
+		Support: 2.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 2.0 {
+				return bcspline(x, 1.0, 0.0)
+			}
+			return 0
+		},
+	}
 
-	// Gaussian = ResampleFilter{
-	// 	Support: 2.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 2.0 {
-	// 			return math.Exp(-2 * x * x)
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	Gaussian = ResampleFilter{
+		Support: 2.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 2.0 {
+				return math.Exp(-2 * x * x)
+			}
+			return 0
+		},
+	}
 
-	// Bartlett = ResampleFilter{
-	// 	Support: 3.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 3.0 {
-	// 			return sinc(x) * (3.0 - x) / 3.0
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	Bartlett = ResampleFilter{
+		Support: 3.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 3.0 {
+				return sinc(x) * (3.0 - x) / 3.0
+			}
+			return 0
+		},
+	}
 
 	Lanczos = ResampleFilter{
 		Support: 3.0,
@@ -760,58 +803,58 @@ func init() {
 		},
 	}
 
-	// Hann = ResampleFilter{
-	// 	Support: 3.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 3.0 {
-	// 			return sinc(x) * (0.5 + 0.5*math.Cos(math.Pi*x/3.0))
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	Hann = ResampleFilter{
+		Support: 3.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 3.0 {
+				return sinc(x) * (0.5 + 0.5*math.Cos(math.Pi*x/3.0))
+			}
+			return 0
+		},
+	}
 
-	// Hamming = ResampleFilter{
-	// 	Support: 3.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 3.0 {
-	// 			return sinc(x) * (0.54 + 0.46*math.Cos(math.Pi*x/3.0))
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	Hamming = ResampleFilter{
+		Support: 3.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 3.0 {
+				return sinc(x) * (0.54 + 0.46*math.Cos(math.Pi*x/3.0))
+			}
+			return 0
+		},
+	}
 
-	// Blackman = ResampleFilter{
-	// 	Support: 3.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 3.0 {
-	// 			return sinc(x) * (0.42 - 0.5*math.Cos(math.Pi*x/3.0+math.Pi) + 0.08*math.Cos(2.0*math.Pi*x/3.0))
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	Blackman = ResampleFilter{
+		Support: 3.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 3.0 {
+				return sinc(x) * (0.42 - 0.5*math.Cos(math.Pi*x/3.0+math.Pi) + 0.08*math.Cos(2.0*math.Pi*x/3.0))
+			}
+			return 0
+		},
+	}
 
-	// Welch = ResampleFilter{
-	// 	Support: 3.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 3.0 {
-	// 			return sinc(x) * (1.0 - (x * x / 9.0))
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	Welch = ResampleFilter{
+		Support: 3.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 3.0 {
+				return sinc(x) * (1.0 - (x * x / 9.0))
+			}
+			return 0
+		},
+	}
 
-	// Cosine = ResampleFilter{
-	// 	Support: 3.0,
-	// 	Kernel: func(x float64) float64 {
-	// 		x = math.Abs(x)
-	// 		if x < 3.0 {
-	// 			return sinc(x) * math.Cos((math.Pi/2.0)*(x/3.0))
-	// 		}
-	// 		return 0
-	// 	},
-	// }
+	Cosine = ResampleFilter{
+		Support: 3.0,
+		Kernel: func(x float64) float64 {
+			x = math.Abs(x)
+			if x < 3.0 {
+				return sinc(x) * math.Cos((math.Pi/2.0)*(x/3.0))
+			}
+			return 0
+		},
+	}
 }

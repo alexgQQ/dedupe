@@ -10,9 +10,12 @@ import (
 
 // The method for getting a dhash is outlined here https://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html
 
+// For image resizing we really don't need a high quality process and can likely ignore samplers that optimize for upscaling
+// the Linear and Box filter work fine but using the NearestNeighbor sacrifices some accuracy in our test case
+
 func Dhash(img image.Image) (uint64, uint64) {
 	size := 9
-	img = utils.Resize(img, 9, 9, utils.Lanczos)
+	img = utils.Resize(img, 9, 9, utils.Linear)
 
 	var segments [9][9]float64
 	for i := 0; i < size; i++ {
@@ -69,7 +72,7 @@ func DCT(img image.Image) uint64 {
 	// the image is larger than 8x8; 32x32 is a good size. This is
 	// really done to simplify the DCT computation and not because it
 	// is needed to reduce the high frequencies.
-	im := utils.Resize(img, size, size, utils.Lanczos)
+	im := utils.Resize(img, size, size, utils.Linear)
 
 	// 2. Reduce color.
 	// The image is reduced to a grayscale just to further simplify
