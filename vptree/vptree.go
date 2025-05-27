@@ -2,36 +2,19 @@ package vptree
 
 import (
 	"container/heap"
-	"dedupe/dhash"
-	"dedupe/phash"
+	"dedupe/hash"
 	"math"
 	"math/rand"
 )
 
 // I gave a shot at using generics with this but it did not pan out how I would like
-// so maybe I should revisit that at some point but for now I'd rather make some progress
-
-// To summarize the issue, I can define a generic hash type that is constrained to the DHash and PHash
-// type Item[H phash.PHash | dhash.DHash] struct {
-// 		...
-//		Hash H
-// }
-// Subsequent struct (Node, QueueItem, VPTree) then need the hash type instantiated on the 
-// underlying Item, like so
-// type Node struct {
-//		...
-// 		Item Item[dhash.DHash]
-//		...
-// }
-// This has to happen on any instantiation of the Item class, so this propegates to the Vptree functions
-// the QueueItem and so on and so forth, making me basically have to redefine these for each hash anyway
-// I am not totally sure how to approach this properly, and I don't know enough about generics to fix it for now
+// mostly due to the need of the type instantiation with how it fits in the structs
+// It seemed much simpler to just represent the hashes as an array and drop the extra types
 
 type Item struct {
 	FilePath string
 	ID       uint
-	Dhash	*dhash.DHash
-	Phash	*phash.PHash
+	Hashes   []uint64
 }
 
 type Node struct {
@@ -46,12 +29,15 @@ type QueueItem struct {
 	Dist float64
 }
 
-func distance(a Item, b Item) float64 {
-	if a.Dhash != nil {
-		return float64(a.Dhash.Hamming(b.Dhash))
-	} else {
-		return float64(a.Phash.Hamming(b.Phash))
+func distance(a, b Item) float64 {
+	if len(a.Hashes) != len(b.Hashes) {
+		panic("The hash sizes must be the same")
 	}
+	var dist int
+	for i, h := range a.Hashes {
+		dist += hash.Hamming(h, b.Hashes[i])
+	}
+	return float64(dist)
 }
 
 type VPTree struct {

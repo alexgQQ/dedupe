@@ -1,8 +1,7 @@
 package main
 
 import (
-	"dedupe/dhash"
-	"dedupe/phash"
+	"dedupe/hash"
 	"dedupe/utils"
 	"dedupe/vptree"
 	"encoding/csv"
@@ -207,12 +206,16 @@ func buildTree(files []string, hashType string) *vptree.VPTree {
 					slog.Error("Error loading image", "file", f, "error", err)
 				} else {
 					item := vptree.Item{FilePath: f}
-					if hashType == "phash" {
-						hash := phash.New(img)
-						item.Phash = hash
+					if hashType == "dct" {
+						hashes := make([]uint64, 1)
+						hashes[0] = hash.DCT(img)
+						item.Hashes = hashes
 					} else {
-						hash := dhash.New(img)
-						item.Dhash = hash
+						hashes := make([]uint64, 2)
+						rHash, cHash := hash.Dhash(img)
+						hashes[0] = rHash
+						hashes[1] = cHash
+						item.Hashes = hashes
 					}
 					// slog.Info("Computed image hash", "file", f, "hash", hash)
 					itemMap.addItem(&item)
