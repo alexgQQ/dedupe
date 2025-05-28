@@ -45,31 +45,6 @@ func (c *ItemMapper) getItem(id uint) (*vptree.Item, error) {
 
 var itemMap ItemMapper
 
-func validatePath(path string) error {
-	if path == "" {
-		return fmt.Errorf("path cannot be empty")
-	}
-
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return fmt.Errorf("invalid path: %w", err)
-	}
-
-	fileInfo, err := os.Stat(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("directory does not exist: %w", err)
-		}
-		return fmt.Errorf("error checking path: %w", err)
-	}
-
-	if !fileInfo.IsDir() {
-		return fmt.Errorf("path is not a directory")
-	}
-
-	return nil
-}
-
 func main() {
 	var target string
 	var output string
@@ -110,20 +85,11 @@ func main() {
 		logLevel.Set(slog.LevelWarn)
 	}
 
-	if target == "" {
-		slog.Error("No target directory provided")
-		os.Exit(1)
-	} else if err := validatePath(target); err != nil {
+	if err := utils.PathIsDir(target); err != nil {
 		slog.Error("Invalid target path", "path", target, "error", err)
 		os.Exit(1)
 	}
-	// It would be interesting to do this in an iterator pattern
-	// instead of loading a array of strings that could be potentially very large
-	// With more recent go version we can do some things like generator patterns
-	// in python
-	// check out the rabbit hole https://github.com/golang/go/issues/64341
 	files := utils.FindImages(target, recursive)
-	// TODO: this fails to find images when the root is a nested dir
 	if len(files) < 1 {
 		slog.Error("No images found at target path", "path", target)
 		os.Exit(1)
@@ -161,32 +127,20 @@ func main() {
 	w.Flush()
 
 	if move {
+		dupeDir := filepath.Join(target, "duplicates")
+		os.Mkdir(dupeDir, 0750)
 		for _, files := range duplicates {
-			moveFiles(files, target)
+			if err := utils.MoveFiles(files, dupeDir); err != nil {
+				slog.Error("Error moving files", "error", err)
+			}
 		}
 	} else if delete {
 		for _, files := range duplicates {
-			deleteFiles(files)
+			if err := utils.DeleteFiles(files); err != nil {
+				slog.Error("Error deleting files", "error", err)
+			}
 		}
 	}
-}
-
-func moveFiles(files []string, dir string) error {
-	dupeDir := filepath.Join(dir, "duplicates")
-	os.Mkdir(dupeDir, 0750)
-	for _, src := range files {
-		filename := filepath.Base(src)
-		dst := filepath.Join(dir, "duplicates", filename)
-		os.Rename(src, dst)
-	}
-	return nil
-}
-
-func deleteFiles(files []string) error {
-	for _, src := range files {
-		os.Remove(src)
-	}
-	return nil
 }
 
 func buildTree(files []string, hashType string) *vptree.VPTree {
@@ -247,8 +201,11 @@ func buildTree(files []string, hashType string) *vptree.VPTree {
 
 func findDuplicates(files []string, hashType string) ([][]string, int, error) {
 	tree := buildTree(files, hashType)
-	// This is a bit of an arbitrary number, most duplicates will have a very low distance metric but let's cast a wide net
-	threshold := 20.0
+	// Based on some of the initial documentation,
+	// https://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html
+	// https://phash.org/docs/design.html
+	// The dhash implementation should work with 10 and the dct should work with 22
+	threshold := 22.0
 	total := 0
 	var skip []uint
 	var filegroups [][]string
@@ -277,9 +234,6 @@ func findDuplicates(files []string, hashType string) ([][]string, int, error) {
 			}
 			slog.Info("VPTree found results within item", "item", item, "results", f, "distances", d, "threshold", threshold)
 		}
-		// for _, i := range found {
-		// 	group = append(group, i.ID)
-		// }
 		slices.Sort(group)
 		group = slices.Compact(group)
 		total += len(group)
