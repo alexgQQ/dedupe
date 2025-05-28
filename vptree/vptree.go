@@ -3,7 +3,7 @@ package vptree
 import (
 	"container/heap"
 	"dedupe/hash"
-	"math"
+	"iter"
 	"math/rand"
 )
 
@@ -50,44 +50,23 @@ func New(items []Item) *VPTree {
 	return t
 }
 
-func (vp *VPTree) Items() []Item {
-	var items []Item
-	var traverse func(n *Node)
-
-	traverse = func(n *Node) {
-		items = append(items, n.Item)
-		if n.Left != nil {
-			traverse(n.Left)
-		}
-		if n.Right != nil {
-			traverse(n.Right)
-		}
+func (n *Node) walk(yield func(Item) bool) bool {
+	if n == nil {
+		return true
 	}
-
-	traverse(vp.root)
-	return items
+	if !yield(n.Item) {
+		return false
+	}
+	if !n.Left.walk(yield) {
+		return false
+	}
+	return n.Right.walk(yield)
 }
 
-func (vp *VPTree) Search(target Item, k int) ([]Item, []float64) {
-	var results []Item
-	var distances []float64
-
-	q := make(queue, 0, k)
-
-	tau := math.MaxFloat64
-	vp.search(vp.root, tau, target, k, &q)
-
-	for q.Len() > 0 {
-		hi := heap.Pop(&q)
-		results = append(results, hi.(*QueueItem).Item)
-		distances = append(distances, hi.(*QueueItem).Dist)
+func (vp *VPTree) All() iter.Seq[Item] {
+	return func(yield func(Item) bool) {
+		vp.root.walk(yield)
 	}
-
-	for i, j := 0, len(results)-1; i < j; i, j = i+1, j-1 {
-		results[i], results[j] = results[j], results[i]
-		distances[i], distances[j] = distances[j], distances[i]
-	}
-	return results, distances
 }
 
 func (vp *VPTree) Within(target Item, radius float64) ([]Item, []float64) {
@@ -149,47 +128,6 @@ func (vp *VPTree) build(items []Item) *Node {
 	return n
 }
 
-func (vp *VPTree) search(n *Node, tau float64, target Item, k int, q *queue) {
-	// This comes through as nil when we've reached the end of a branch
-	if n == nil {
-		return
-	}
-
-	dist := distance(n.Item, target)
-
-	if dist < tau {
-		if q.Len() == k {
-			heap.Pop(q)
-		}
-		heap.Push(q, &QueueItem{n.Item, dist})
-		if q.Len() == k {
-			tau = q.Top().(*QueueItem).Dist
-		}
-	}
-
-	if n.Left == nil && n.Right == nil {
-		return
-	}
-
-	if dist < n.Threshold {
-		if dist-tau <= n.Threshold {
-			vp.search(n.Left, tau, target, k, q)
-		}
-
-		if dist+tau >= n.Threshold {
-			vp.search(n.Right, tau, target, k, q)
-		}
-	} else {
-		if dist+tau >= n.Threshold {
-			vp.search(n.Right, tau, target, k, q)
-		}
-
-		if dist-tau <= n.Threshold {
-			vp.search(n.Left, tau, target, k, q)
-		}
-	}
-}
-
 func (vp *VPTree) within(n *Node, tau float64, target Item, q *queue) {
 	// This comes through as nil when we've reached the end of a branch
 	if n == nil {
@@ -224,3 +162,68 @@ func (vp *VPTree) within(n *Node, tau float64, target Item, q *queue) {
 		}
 	}
 }
+
+// I don't actually need this functionality but it is a good example
+// for using this as a k item search
+// func (vp *VPTree) Search(target Item, k int) ([]Item, []float64) {
+// 	var results []Item
+// 	var distances []float64
+
+// 	q := make(queue, 0, k)
+
+// 	tau := math.MaxFloat64
+// 	vp.search(vp.root, tau, target, k, &q)
+
+// 	for q.Len() > 0 {
+// 		hi := heap.Pop(&q)
+// 		results = append(results, hi.(*QueueItem).Item)
+// 		distances = append(distances, hi.(*QueueItem).Dist)
+// 	}
+
+// 	for i, j := 0, len(results)-1; i < j; i, j = i+1, j-1 {
+// 		results[i], results[j] = results[j], results[i]
+// 		distances[i], distances[j] = distances[j], distances[i]
+// 	}
+// 	return results, distances
+// }
+
+// func (vp *VPTree) search(n *Node, tau float64, target Item, k int, q *queue) {
+// 	// This comes through as nil when we've reached the end of a branch
+// 	if n == nil {
+// 		return
+// 	}
+
+// 	dist := distance(n.Item, target)
+
+// 	if dist < tau {
+// 		if q.Len() == k {
+// 			heap.Pop(q)
+// 		}
+// 		heap.Push(q, &QueueItem{n.Item, dist})
+// 		if q.Len() == k {
+// 			tau = q.Top().(*QueueItem).Dist
+// 		}
+// 	}
+
+// 	if n.Left == nil && n.Right == nil {
+// 		return
+// 	}
+
+// 	if dist < n.Threshold {
+// 		if dist-tau <= n.Threshold {
+// 			vp.search(n.Left, tau, target, k, q)
+// 		}
+
+// 		if dist+tau >= n.Threshold {
+// 			vp.search(n.Right, tau, target, k, q)
+// 		}
+// 	} else {
+// 		if dist+tau >= n.Threshold {
+// 			vp.search(n.Right, tau, target, k, q)
+// 		}
+
+// 		if dist-tau <= n.Threshold {
+// 			vp.search(n.Left, tau, target, k, q)
+// 		}
+// 	}
+// }

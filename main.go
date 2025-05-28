@@ -253,7 +253,7 @@ func findDuplicates(files []string, hashType string) ([][]string, int, error) {
 	var skip []uint
 	var filegroups [][]string
 
-	for _, item := range tree.Items() {
+	for item := range tree.All() {
 		var group []uint
 		if slices.Contains(skip, item.ID) {
 			continue
