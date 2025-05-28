@@ -18,15 +18,10 @@ type Item struct {
 }
 
 type Node struct {
-	Item      Item
-	Threshold float64
-	Left      *Node
-	Right     *Node
-}
-
-type QueueItem struct {
-	Item Item
-	Dist float64
+	item      Item
+	threshold float64
+	left      *Node
+	right     *Node
 }
 
 func distance(a, b Item) float64 {
@@ -54,13 +49,13 @@ func (n *Node) walk(yield func(Item) bool) bool {
 	if n == nil {
 		return true
 	}
-	if !yield(n.Item) {
+	if !yield(n.item) {
 		return false
 	}
-	if !n.Left.walk(yield) {
+	if !n.left.walk(yield) {
 		return false
 	}
-	return n.Right.walk(yield)
+	return n.right.walk(yield)
 }
 
 func (vp *VPTree) All() iter.Seq[Item] {
@@ -80,10 +75,10 @@ func (vp *VPTree) Within(target Item, radius float64) ([]Item, []float64) {
 
 	for q.Len() > 0 {
 		hi := heap.Pop(&q)
-		item := hi.(*QueueItem).Item
+		item := hi.(*QueueItem).item
 		if item.ID != target.ID {
 			results = append(results, item)
-			distances = append(distances, hi.(*QueueItem).Dist)
+			distances = append(distances, hi.(*QueueItem).dist)
 		}
 	}
 
@@ -103,17 +98,17 @@ func (vp *VPTree) build(items []Item) *Node {
 
 	n := &Node{}
 	idx := rand.Intn(len(items))
-	n.Item = items[idx]
+	n.item = items[idx]
 	items[idx], items = items[len(items)-1], items[:len(items)-1]
 
 	if len(items) > 0 {
 		median := len(items) / 2
-		pivotDist := distance(items[median], n.Item)
+		pivotDist := distance(items[median], n.item)
 		items[median], items[len(items)-1] = items[len(items)-1], items[median]
 
 		storeIndex := 0
 		for i := 0; i < len(items)-1; i++ {
-			if distance(items[i], n.Item) <= pivotDist {
+			if distance(items[i], n.item) <= pivotDist {
 				items[storeIndex], items[i] = items[i], items[storeIndex]
 				storeIndex++
 			}
@@ -121,9 +116,9 @@ func (vp *VPTree) build(items []Item) *Node {
 		items[len(items)-1], items[storeIndex] = items[storeIndex], items[len(items)-1]
 		median = storeIndex
 
-		n.Threshold = pivotDist
-		n.Left = vp.build(items[:median])
-		n.Right = vp.build(items[median:])
+		n.threshold = pivotDist
+		n.left = vp.build(items[:median])
+		n.right = vp.build(items[median:])
 	}
 	return n
 }
@@ -134,31 +129,31 @@ func (vp *VPTree) within(n *Node, tau float64, target Item, q *queue) {
 		return
 	}
 
-	dist := distance(n.Item, target)
+	dist := distance(n.item, target)
 
 	if dist < tau {
-		heap.Push(q, &QueueItem{n.Item, dist})
+		heap.Push(q, &QueueItem{n.item, dist})
 	}
 
-	if n.Left == nil && n.Right == nil {
+	if n.left == nil && n.right == nil {
 		return
 	}
 
-	if dist < n.Threshold {
-		if dist-tau <= n.Threshold {
-			vp.within(n.Left, tau, target, q)
+	if dist < n.threshold {
+		if dist-tau <= n.threshold {
+			vp.within(n.left, tau, target, q)
 		}
 
-		if dist+tau >= n.Threshold {
-			vp.within(n.Right, tau, target, q)
+		if dist+tau >= n.threshold {
+			vp.within(n.right, tau, target, q)
 		}
 	} else {
-		if dist+tau >= n.Threshold {
-			vp.within(n.Right, tau, target, q)
+		if dist+tau >= n.threshold {
+			vp.within(n.right, tau, target, q)
 		}
 
-		if dist-tau <= n.Threshold {
-			vp.within(n.Left, tau, target, q)
+		if dist-tau <= n.threshold {
+			vp.within(n.left, tau, target, q)
 		}
 	}
 }

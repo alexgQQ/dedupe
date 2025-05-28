@@ -11,12 +11,12 @@ func TestMaxHeapQueue(t *testing.T) {
 	heap.Push(&q, &QueueItem{Item{}, 10.0})
 	heap.Push(&q, &QueueItem{Item{}, max})
 	heap.Push(&q, &QueueItem{Item{}, 50.0})
-	if q.Top().(*QueueItem).Dist != max {
+	if q.Top().(*QueueItem).dist != max {
 		t.Error("Top of the queue should be the largest distance")
 	}
 	max = 110.0
 	heap.Push(&q, &QueueItem{Item{}, max})
-	if q.Top().(*QueueItem).Dist != max {
+	if q.Top().(*QueueItem).dist != max {
 		t.Error("Top of the queue should be the new largest distance")
 	}
 }
