@@ -17,6 +17,10 @@ type Item struct {
 	Hashes   []uint64
 }
 
+func NewItem(filepath string, hashes ...uint64) Item {
+	return Item{FilePath: filepath, Hashes: hashes}
+}
+
 type Node struct {
 	item      Item
 	threshold float64

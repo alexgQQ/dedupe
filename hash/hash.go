@@ -9,6 +9,31 @@ import (
 	"sort"
 )
 
+type HashType struct {
+	name      string
+	Threshold float64
+}
+
+// Based on some of the initial documentation,
+// https://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html
+// https://phash.org/docs/design.html
+// The dhash implementation should work with 10 and the dct should work with 22
+
+var DHASH HashType = HashType{
+	name:      "dhash",
+	Threshold: 10.0,
+}
+
+var DCT HashType = HashType{
+	name:      "dct",
+	Threshold: 22.0,
+}
+
+var HashTypes = map[string]HashType{
+	DHASH.name: DHASH,
+	DCT.name:   DCT,
+}
+
 // Convert to greyscale with the luminosity approximation
 func colorToGrey(c color.Color) float64 {
 	r, g, b, _ := c.RGBA()
@@ -20,7 +45,7 @@ func colorToGrey(c color.Color) float64 {
 // For image resizing we really don't need a high quality process and can likely ignore samplers that optimize for upscaling
 // the Linear and Box filter work fine but using the NearestNeighbor sacrifices some accuracy in our test case
 
-func Dhash(img image.Image) (uint64, uint64) {
+func Dhash(img image.Image) (row, col uint64) {
 	size := 9
 	img = utils.Resize(img, 9, 9, utils.Linear)
 
@@ -30,8 +55,6 @@ func Dhash(img image.Image) (uint64, uint64) {
 			segments[i][j] = colorToGrey(img.At(i, j))
 		}
 	}
-
-	var row, col uint64
 
 	for y := 0; y < 8; y++ {
 		for x := 0; x < 8; x++ {
@@ -43,7 +66,7 @@ func Dhash(img image.Image) (uint64, uint64) {
 			}
 		}
 	}
-	return row, col
+	return
 }
 
 // This is ported from https://github.com/azr/phash/blob/main/dtc.go
@@ -59,7 +82,7 @@ func Dhash(img image.Image) (uint64, uint64) {
 //  4. Reduce the DCT to 8x8 in order to keep high frequencies.
 //  5. Compute the median value of 8x8 dtc.
 //  6. Further reduce the DCT into an uint64.
-func DCT(img image.Image) uint64 {
+func Dct(img image.Image) uint64 {
 	// if img == nil {
 	// 	return nil
 	// }

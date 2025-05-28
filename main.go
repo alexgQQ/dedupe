@@ -9,10 +9,12 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 )
 
@@ -52,7 +54,7 @@ func main() {
 	var verbose bool
 	var move bool
 	var delete bool
-	var hashType string
+	var hashName string
 
 	flag.StringVar(&target, "target", "", "The directory to search for image duplicates")
 	flag.StringVar(&target, "t", "", "alias for -target")
@@ -72,7 +74,9 @@ func main() {
 	flag.BoolVar(&delete, "delete", false, "Delete duplicate images")
 	flag.BoolVar(&delete, "d", false, "alias for -delete")
 
-	flag.StringVar(&hashType, "hash", "dhash", "Which type of hash to use for searching. Can be either 'dhash' or 'dct")
+	hashTypes := slices.Sorted(maps.Keys(hash.HashTypes))
+	opts := strings.Join(hashTypes, ", ")
+	flag.StringVar(&hashName, "hash", "dct", fmt.Sprintf("Which type of hash to use for searching. Available options are %s", opts))
 
 	flag.Parse()
 
@@ -83,6 +87,14 @@ func main() {
 		logLevel.Set(slog.LevelInfo)
 	} else {
 		logLevel.Set(slog.LevelWarn)
+	}
+
+	var hashType hash.HashType
+	if !slices.Contains(hashTypes, hashName) {
+		slog.Error("Invalid hash type provided", "hashName", hashName)
+		hashType = hash.DCT
+	} else {
+		hashType = hash.HashTypes[hashName]
 	}
 
 	if err := utils.PathIsDir(target); err != nil {
@@ -97,7 +109,9 @@ func main() {
 	target, _ = filepath.Abs(target)
 
 	fmt.Printf("Scanning %s for duplicate images...\n", target)
-	duplicates, total, err := findDuplicates(files, hashType)
+	tree := buildTree(files, hashType)
+	duplicates, total, err := findDuplicates(tree, files, hashType.Threshold)
+
 	if err != nil {
 		slog.Error("Error occurred while finding duplicates", "error", err)
 		os.Exit(1)
@@ -143,7 +157,7 @@ func main() {
 	}
 }
 
-func buildTree(files []string, hashType string) *vptree.VPTree {
+func buildTree(files []string, hashType hash.HashType) *vptree.VPTree {
 	var items []vptree.Item
 	var wg sync.WaitGroup
 
@@ -162,19 +176,14 @@ func buildTree(files []string, hashType string) *vptree.VPTree {
 				if err != nil {
 					slog.Error("Error loading image", "file", f, "error", err)
 				} else {
-					item := vptree.Item{FilePath: f}
-					if hashType == "dct" {
-						hashes := make([]uint64, 1)
-						hashes[0] = hash.DCT(img)
-						item.Hashes = hashes
-					} else {
-						hashes := make([]uint64, 2)
+					var item vptree.Item
+					switch hashType {
+					case hash.DCT:
+						item = vptree.NewItem(f, hash.Dct(img))
+					case hash.DHASH:
 						rHash, cHash := hash.Dhash(img)
-						hashes[0] = rHash
-						hashes[1] = cHash
-						item.Hashes = hashes
+						item = vptree.NewItem(f, rHash, cHash)
 					}
-					// slog.Info("Computed image hash", "file", f, "hash", hash)
 					itemMap.addItem(&item)
 					results <- item
 				}
@@ -199,13 +208,7 @@ func buildTree(files []string, hashType string) *vptree.VPTree {
 	return vptree.New(items)
 }
 
-func findDuplicates(files []string, hashType string) ([][]string, int, error) {
-	tree := buildTree(files, hashType)
-	// Based on some of the initial documentation,
-	// https://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html
-	// https://phash.org/docs/design.html
-	// The dhash implementation should work with 10 and the dct should work with 22
-	threshold := 22.0
+func findDuplicates(tree *vptree.VPTree, files []string, threshold float64) ([][]string, int, error) {
 	total := 0
 	var skip []uint
 	var filegroups [][]string
