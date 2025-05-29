@@ -22,7 +22,7 @@ jobs:
           -w /go/src/github.com/alexgQQ/go-image-deduper
           -e CGO_ENABLED=1
           docker.elastic.co/beats-dev/golang-crossbuild:${CONTAINER}
-          --build-cmd "go build -ldflags '-s -w' -o dedupe.linux-${ARCH}"
+          --build-cmd "go build -ldflags '-s -w' -o dedupe.linux-${ARCH} cmd/main.go"
           -p linux/${ARCH}
 
       - name: Build windows amd64
@@ -35,7 +35,7 @@ jobs:
           -w /go/src/github.com/alexgQQ/go-image-deduper
           -e CGO_ENABLED=1
           docker.elastic.co/beats-dev/golang-crossbuild:${CONTAINER}
-          --build-cmd "go build -ldflags '-s -w' -o dedupe.windows-${ARCH}.exe"
+          --build-cmd "go build -ldflags '-s -w' -o dedupe.windows-${ARCH}.exe cmd/main.go"
           -p windows/${ARCH}
 
       - name: create new release
