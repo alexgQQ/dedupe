@@ -41,27 +41,26 @@ func colorToGrey(c color.Color) float64 {
 }
 
 // The method for getting a dhash is outlined here https://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html
-
-// For image resizing we really don't need a high quality process and can likely ignore samplers that optimize for upscaling
-// the Linear and Box filter work fine but using the NearestNeighbor sacrifices some accuracy in our test case
-
 func Dhash(img image.Image) (row, col uint64) {
+	// For image resizing we really don't need a high quality process and can likely ignore samplers that optimize for upscaling
+	// the Linear and Box filter work fine but using the NearestNeighbor sacrifices some accuracy in our test case
+	// TODO: there should be a way to account for images that are smaller than the target size
 	size := 9
-	img = utils.Resize(img, 9, 9, utils.Linear)
+	img = utils.Resize(img, size, size, utils.Linear)
 
-	var segments [9][9]float64
-	for i := 0; i < size; i++ {
-		for j := 0; j < size; j++ {
-			segments[i][j] = colorToGrey(img.At(i, j))
+	grey := make([]float64, size*size)
+	for x := range size {
+		for y := range size {
+			grey[size*x+y] = colorToGrey(img.At(x, y))
 		}
 	}
 
-	for y := 0; y < 8; y++ {
-		for x := 0; x < 8; x++ {
-			if segments[x][y] < segments[x+1][y] {
+	for y := range size - 1 {
+		for x := range size - 1 {
+			if grey[size*x+y] < grey[size*(x+1)+y] {
 				row |= 1 << ((y * 8) + x)
 			}
-			if segments[x][y] < segments[x][y+1] {
+			if grey[size*x+y] < grey[size*x+(y+1)] {
 				col |= 1 << ((y * 8) + x)
 			}
 		}
@@ -70,81 +69,44 @@ func Dhash(img image.Image) (row, col uint64) {
 }
 
 // This is ported from https://github.com/azr/phash/blob/main/dtc.go
-// I initially used it as a quick test so it may be worth refactoring
-// but it works for now and that's enough
-
-// DTC computes the perceptual hash for img using phash dtc image
-// technique.
-//
-//  1. Reduce size to 32x32
-//  2. Reduce color to greyscale
-//  3. Compute the DCT.
-//  4. Reduce the DCT to 8x8 in order to keep high frequencies.
-//  5. Compute the median value of 8x8 dtc.
-//  6. Further reduce the DCT into an uint64.
-func Dct(img image.Image) uint64 {
-	// if img == nil {
-	// 	return nil
-	// }
-
-	var (
-		dtcSizeBig = 32
-		dtcSize    = 8
-	)
-
-	size := dtcSizeBig
-	smallerSize := dtcSize
-
-	// 1. Reduce size.
-	// Like Average Hash, pHash starts with a small image. However,
-	// the image is larger than 8x8; 32x32 is a good size. This is
-	// really done to simplify the DCT computation and not because it
-	// is needed to reduce the high frequencies.
+func Dct(img image.Image) (phash uint64) {
+	// For image resizing we really don't need a high quality process and can likely ignore samplers that optimize for upscaling
+	// the Linear and Box filter work fine but using the NearestNeighbor sacrifices some accuracy in our test case
+	// TODO: there should be a way to account for images that are smaller than the target size
+	size := 32
 	im := utils.Resize(img, size, size, utils.Linear)
 
-	// 2. Reduce color.
-	// The image is reduced to a grayscale just to further simplify
-	// the number of computations.
-
-	vals := make([]float64, size*size)
+	// Convert the image to grayscale
+	gray := make([]float64, size*size)
 	for i := 0; i < size; i++ {
 		for j := 0; j < size; j++ {
-			vals[size*i+j] = colorToGrey(im.At(i, j))
+			gray[size*i+j] = colorToGrey(im.At(i, j))
 		}
 	}
 
-	// 3. Compute the DCT.
-	// The DCT separates the image into a collection of frequencies
-	// and scalars. While JPEG uses an 8x8 DCT, this algorithm uses a
-	// 32x32 DCT.
-
 	applyDCT2 := func(N int, f []float64) []float64 {
-		// initialize coefficients
+		// I'm not entirely sure why these coefficient values are these specifically but they work
 		c := make([]float64, N)
 		c[0] = 1 / math.Sqrt(2)
 		for i := 1; i < N; i++ {
 			c[i] = 1
 		}
 
-		// output goes here
-		F := make([]float64, N*N)
-
-		// construct a lookup table, because it's O(n^4)
+		// Compute the dct2 as the sum of the cosine products
+		// A good reference can be seen here https://www.mathworks.com/help/images/discrete-cosine-transform.html
 		entries := (2 * N) * (N - 1)
 		COS := make([]float64, entries)
-		for i := 0; i < entries; i++ {
+		for i := range entries {
 			COS[i] = math.Cos(float64(i) / float64(2*N) * math.Pi)
 		}
 
-		// the core loop inside a loop inside a loop...
-		for u := 0; u < N; u++ {
-			for v := 0; v < N; v++ {
+		F := make([]float64, N*N)
+		for u := range N {
+			for v := range N {
 				var sum float64
-				for i := 0; i < N; i++ {
-					for j := 0; j < N; j++ {
-						sum += COS[(2*i+1)*u] *
-							COS[(2*j+1)*v] *
-							f[N*i+j]
+				for i := range N {
+					for j := range N {
+						sum += COS[(2*i+1)*u] * COS[(2*j+1)*v] * f[N*i+j]
 					}
 				}
 				sum *= ((c[u] * c[v]) / 4)
@@ -154,46 +116,33 @@ func Dct(img image.Image) uint64 {
 		return F
 	}
 
-	dctVals := applyDCT2(size, vals)
+	dctVals := applyDCT2(size, gray)
 
-	// 4. Reduce the DCT.
-	// While the DCT is 32x32, just keep the top-left 8x8. Those
-	// represent the lowest frequencies in the picture.
-
-	vals = make([]float64, 0, smallerSize*smallerSize)
-	for x := 1; x <= smallerSize; x++ {
-		for y := 1; y <= smallerSize; y++ {
-			vals = append(vals, dctVals[size*x+y])
+	// The hashing only needs the top left 8x8 domain as these contain the lower frequencies
+	regionSize := 8
+	freqs := make([]float64, regionSize*regionSize)
+	for x := range regionSize {
+		for y := range regionSize {
+			// Exclude the first term from dct as it's coefficient can throw off the average
+			xN := x + 1
+			yN := y + 1
+			freqs[regionSize*x+y] = dctVals[size*xN+yN]
 		}
 	}
 
-	// 5. Compute the median value.
-	// Like the Average Hash, compute the mean DCT value (using only
-	// the 8x8 DCT low-frequency values and excluding the first term
-	// since the DC coefficient can be significantly different from
-	// the other values and will throw off the average).
+	// Get the median value from the low frequency band
+	sorted := make([]float64, regionSize*regionSize)
+	copy(sorted, freqs)
+	sort.Float64s(sorted)
+	median := sorted[regionSize*regionSize/2]
 
-	sortedVals := make([]float64, smallerSize*smallerSize)
-	copy(sortedVals, vals)
-	sort.Float64s(sortedVals)
-	median := sortedVals[smallerSize*smallerSize/2]
-
-	// 6. Further reduce the DCT.
-	// Set the 64 hash bits to 0 or 1 depending on whether each of the
-	// 64 DCT values is above or below the average value. The result
-	// doesn't tell us the actual low frequencies; it just tells us
-	// the very-rough relative scale of the frequencies to the mean.
-	// The result will not vary as long as the overall structure of
-	// the image remains the same; this will survive gamma and color
-	// histogram adjustments without a problem.
-
-	var phash uint64
-	for n, e := range vals {
-		if e > median { // when frequency is higher than median
-			phash ^= (1 << uint64(n)) // set nth bit to one
+	// Compute the hash by a relative scale from the median that enables accurate and resilient comparison.
+	for n, f := range freqs {
+		if f > median {
+			phash ^= (1 << uint64(n))
 		}
 	}
-	return phash
+	return
 }
 
 func Hamming(a, b uint64) int {
