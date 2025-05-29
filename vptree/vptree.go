@@ -2,10 +2,11 @@ package vptree
 
 import (
 	"container/heap"
-	"dedupe/hash"
 	"iter"
 	"math/rand"
 	"sync"
+
+	"github.com/alexgQQ/dedupe/hash"
 )
 
 // This keeps track of each filepath with it's corresponding Item.ID.

@@ -1,12 +1,13 @@
 package hash
 
 import (
-	"dedupe/utils"
 	"image"
 	"image/color"
 	"math"
 	"math/bits"
 	"sort"
+
+	"github.com/alexgQQ/dedupe/utils"
 )
 
 type HashType struct {

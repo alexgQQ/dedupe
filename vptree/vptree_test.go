@@ -1,10 +1,11 @@
 package vptree
 
 import (
-	"dedupe/hash"
 	"math/rand"
 	"slices"
 	"testing"
+
+	"github.com/alexgQQ/dedupe/hash"
 )
 
 func TestVPTreeWithin(t *testing.T) {
