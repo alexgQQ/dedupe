@@ -1,7 +1,6 @@
 package dedupe
 
 import (
-	"log/slog"
 	"runtime"
 	"slices"
 	"sync"
@@ -9,6 +8,11 @@ import (
 	"github.com/alexgQQ/dedupe/hash"
 	"github.com/alexgQQ/dedupe/utils"
 	"github.com/alexgQQ/dedupe/vptree"
+)
+
+var (
+	DHASH hash.HashType = hash.DHASH
+	DCT   hash.HashType = hash.DCT
 )
 
 func buildTree(files []string, hashType hash.HashType) (*vptree.VPTree, *vptree.FileMapper) {
@@ -28,7 +32,7 @@ func buildTree(files []string, hashType hash.HashType) (*vptree.VPTree, *vptree.
 			for f := range work {
 				img, err := utils.LoadImage(f)
 				if err != nil {
-					slog.Error("Error loading image", "file", f, "error", err)
+					// slog.Error("Error loading image", "file", f, "error", err)
 				} else {
 					var item *vptree.Item
 					switch hashType {
@@ -72,11 +76,11 @@ func gatherDuplicateIds(tree *vptree.VPTree, threshold float64) ([][]uint, int, 
 		if slices.Contains(skip, item.ID) {
 			continue
 		}
-		found, dist := tree.Within(item, threshold)
+		found, _ := tree.Within(item, threshold)
 		if len(found) <= 0 {
 			continue
 		}
-		slog.Info("VPTree found results within item", "item", item, "results", found, "distances", dist, "threshold", threshold)
+		// slog.Info("VPTree found results within item", "item", item, "results", found, "distances", dist, "threshold", threshold)
 		group = append(group, item.ID)
 
 		// I've gone back and forth with myself on this
@@ -85,11 +89,11 @@ func gatherDuplicateIds(tree *vptree.VPTree, threshold float64) ([][]uint, int, 
 		// 2x the threshold from the first item, which isn't necessarily wrong
 		for _, i := range found {
 			group = append(group, i.ID)
-			f, d := tree.Within(i, threshold)
+			f, _ := tree.Within(i, threshold)
 			for _, F := range f {
 				group = append(group, F.ID)
 			}
-			slog.Info("VPTree found results within item", "item", item, "results", f, "distances", d, "threshold", threshold)
+			// slog.Info("VPTree found results within item", "item", item, "results", f, "distances", d, "threshold", threshold)
 		}
 		//
 		slices.Sort(group)
