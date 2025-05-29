@@ -8,7 +8,7 @@ import (
 )
 
 func TestVPTreeWithin(t *testing.T) {
-	var samples []Item
+	var samples []*Item
 	var expected []uint
 
 	// Create some sample points and find the ones that should be
@@ -20,7 +20,7 @@ func TestVPTreeWithin(t *testing.T) {
 		hashes := make([]uint64, 1)
 		hashes[0] = uint64(i)
 		item := Item{ID: uint(i), Hashes: hashes}
-		samples = append(samples, item)
+		samples = append(samples, &item)
 		i++
 	}
 
@@ -37,7 +37,7 @@ func TestVPTreeWithin(t *testing.T) {
 	}
 
 	tree := *New(samples)
-	found, distances := tree.Within(target, threshold)
+	found, distances := tree.Within(*target, threshold)
 
 	if len(found) != len(expected) {
 		t.Errorf("Within returned %d results but %d were expected", len(found), len(expected))

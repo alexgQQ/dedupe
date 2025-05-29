@@ -18,35 +18,6 @@ import (
 	"sync"
 )
 
-// This exists because when we deal with goroutines we need
-// a way to map the processed data back safely so this mutex
-// based container can track all of it
-
-type ItemMapper struct {
-	mu    sync.Mutex
-	count int
-	items []*vptree.Item
-}
-
-func (c *ItemMapper) addItem(item *vptree.Item) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	item.ID = uint(c.count)
-	c.items = append(c.items, item)
-	// such a minor detail but is it better to set this to the length
-	// or just increment
-	c.count++
-}
-
-func (c *ItemMapper) getItem(id uint) (*vptree.Item, error) {
-	if int(id) >= len(c.items) {
-		return nil, fmt.Errorf("integer %d is outside of item array", id)
-	}
-	return c.items[id], nil
-}
-
-var itemMap ItemMapper
-
 func main() {
 	var target string
 	var output string
@@ -109,8 +80,7 @@ func main() {
 	target, _ = filepath.Abs(target)
 
 	fmt.Printf("Scanning %s for duplicate images...\n", target)
-	tree := buildTree(files, hashType)
-	duplicates, total, err := findDuplicates(tree, files, hashType.Threshold)
+	duplicates, total, err := Duplicates(files, hashType)
 
 	if err != nil {
 		slog.Error("Error occurred while finding duplicates", "error", err)
@@ -157,17 +127,17 @@ func main() {
 	}
 }
 
-func buildTree(files []string, hashType hash.HashType) *vptree.VPTree {
-	var items []vptree.Item
+func buildTree(files []string, hashType hash.HashType) (*vptree.VPTree, *vptree.FileMapper) {
 	var wg sync.WaitGroup
+	var fileMap vptree.FileMapper
 
 	// By default this will be the runtime.NumCPU but will be GOMAXPROCS if set in the environment
 	nWorkers := runtime.GOMAXPROCS(0)
 	work := make(chan string)
-	results := make(chan vptree.Item)
+	results := make(chan *vptree.Item)
 
 	// Spin up nWorkers to process images concurrently
-	for i := 0; i < nWorkers; i++ {
+	for _ = range nWorkers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -176,15 +146,14 @@ func buildTree(files []string, hashType hash.HashType) *vptree.VPTree {
 				if err != nil {
 					slog.Error("Error loading image", "file", f, "error", err)
 				} else {
-					var item vptree.Item
+					var item *vptree.Item
 					switch hashType {
 					case hash.DCT:
-						item = vptree.NewItem(f, hash.Dct(img))
+						item = vptree.NewItem(f, &fileMap, hash.Dct(img))
 					case hash.DHASH:
 						rHash, cHash := hash.Dhash(img)
-						item = vptree.NewItem(f, rHash, cHash)
+						item = vptree.NewItem(f, &fileMap, rHash, cHash)
 					}
-					itemMap.addItem(&item)
 					results <- item
 				}
 			}
@@ -201,17 +170,18 @@ func buildTree(files []string, hashType hash.HashType) *vptree.VPTree {
 		close(results)
 	}()
 
-	slog.Info("Gathering image hashes", "imageCount", len(files), "workerCount", nWorkers)
+	// Accumulate the computed hashes to build the vptree
+	var items []*vptree.Item
 	for item := range results {
 		items = append(items, item)
 	}
-	return vptree.New(items)
+	return vptree.New(items), &fileMap
 }
 
-func findDuplicates(tree *vptree.VPTree, files []string, threshold float64) ([][]string, int, error) {
-	total := 0
+func gatherDuplicateIds(tree *vptree.VPTree, threshold float64) ([][]uint, int, error) {
+	var total int = 0
 	var skip []uint
-	var filegroups [][]string
+	var ids [][]uint
 
 	for item := range tree.All() {
 		var group []uint
@@ -237,18 +207,31 @@ func findDuplicates(tree *vptree.VPTree, files []string, threshold float64) ([][
 			}
 			slog.Info("VPTree found results within item", "item", item, "results", f, "distances", d, "threshold", threshold)
 		}
+		//
 		slices.Sort(group)
 		group = slices.Compact(group)
 		total += len(group)
-
-		var paths []string
-		for _, id := range group {
-			item, _ := itemMap.getItem(id)
-			paths = append(paths, item.FilePath)
-		}
-		filegroups = append(filegroups, paths)
 		skip = append(skip, group...)
+		ids = append(ids, group)
 	}
 
+	return ids, total, nil
+}
+
+// This could be the major entrypoint if using as a package
+// How does that look?
+func Duplicates(files []string, hashType hash.HashType) ([][]string, int, error) {
+	tree, fileMap := buildTree(files, hashType)
+	ids, total, _ := gatherDuplicateIds(tree, hashType.Threshold)
+
+	filegroups := make([][]string, len(ids))
+	for i, group := range ids {
+		paths := make([]string, len(group))
+		for j, id := range group {
+			filepath, _ := fileMap.ByID(id)
+			paths[j] = filepath
+		}
+		filegroups[i] = paths
+	}
 	return filegroups, total, nil
 }

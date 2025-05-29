@@ -5,20 +5,48 @@ import (
 	"dedupe/hash"
 	"iter"
 	"math/rand"
+	"sync"
 )
 
-// I gave a shot at using generics with this but it did not pan out how I would like
-// mostly due to the need of the type instantiation with how it fits in the structs
-// It seemed much simpler to just represent the hashes as an array and drop the extra types
+// This keeps track of each filepath with it's corresponding Item.ID.
+// It works with a mutex as we issue goroutines when gathering hashes from files
+// and need the ID values to be unique and safe from race conditions.
 
-type Item struct {
-	FilePath string
-	ID       uint
-	Hashes   []uint64
+type FileMapper struct {
+	mu    sync.Mutex
+	count uint
+	files []string
 }
 
-func NewItem(filepath string, hashes ...uint64) Item {
-	return Item{FilePath: filepath, Hashes: hashes}
+func (c *FileMapper) addFile(file string) uint {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.files = append(c.files, file)
+	c.count++
+	return c.count
+}
+
+func (c *FileMapper) ByID(id uint) (string, error) {
+	// A panic may be more appropriate if the id is off then something is very wrong
+	// if int(id) > len(c.files) {
+	// 	return "", fmt.Errorf("integer %d is outside of item array", id)
+	// }
+	return c.files[id-1], nil
+}
+
+// 	Each Item represents a hash for an image file.
+//	An unique ID is used in place of the file path and should be 1-indexed to avoid zero valued collisions.
+// 	The hash is either a single 64 bit value (dct) or a 128 bit value (dhash) as two 64 bit values.
+
+type Item struct {
+	ID     uint
+	Hashes []uint64
+}
+
+func NewItem(file string, fileMap *FileMapper, hashes ...uint64) *Item {
+	item := Item{Hashes: hashes}
+	item.ID = fileMap.addFile(file)
+	return &item
 }
 
 type Node struct {
@@ -43,7 +71,7 @@ type VPTree struct {
 	root *Node
 }
 
-func New(items []Item) *VPTree {
+func New(items []*Item) *VPTree {
 	t := &VPTree{}
 	t.root = t.build(items)
 	return t
@@ -94,7 +122,7 @@ func (vp *VPTree) Within(target Item, radius float64) ([]Item, []float64) {
 	return results, distances
 }
 
-func (vp *VPTree) build(items []Item) *Node {
+func (vp *VPTree) build(items []*Item) *Node {
 	// Since this is called recursively there could be an empty slice that comes through here
 	if len(items) == 0 {
 		return nil
@@ -102,17 +130,17 @@ func (vp *VPTree) build(items []Item) *Node {
 
 	n := &Node{}
 	idx := rand.Intn(len(items))
-	n.item = items[idx]
+	n.item = *items[idx]
 	items[idx], items = items[len(items)-1], items[:len(items)-1]
 
 	if len(items) > 0 {
 		median := len(items) / 2
-		pivotDist := distance(items[median], n.item)
+		pivotDist := distance(*items[median], n.item)
 		items[median], items[len(items)-1] = items[len(items)-1], items[median]
 
 		storeIndex := 0
 		for i := 0; i < len(items)-1; i++ {
-			if distance(items[i], n.item) <= pivotDist {
+			if distance(*items[i], n.item) <= pivotDist {
 				items[storeIndex], items[i] = items[i], items[storeIndex]
 				storeIndex++
 			}
