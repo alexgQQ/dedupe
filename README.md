@@ -40,9 +40,9 @@ import (
 func main() {
 
 	images := []string{
-		"images/cat-on-couch.jpg",
-		"images/cat.jpg",
-		"images/copycat.jpg",
+		"testimages/cat-on-couch.jpg",
+		"testimages/cat.jpg",
+		"testimages/copycat.jpg",
 	}
 
 	results, total, _ := dedupe.Duplicates(images, dedupe.DCT)
@@ -61,7 +61,7 @@ func main() {
 
 It's a straightforward package so clone and use whatever go workflow you like. The cli at cmd/dedupe/main.go is the best entrypoint and I'd recommend to have the verbose flag set and point it at the test images in the repo. Configure your debugger to do that.
 ```bash
-go run cmd/dedupe/main.go -v -t images
+go run cmd/dedupe/main.go -v -t testimages
 ```
 
 Keep it clean and tidy
@@ -76,7 +76,7 @@ The process works by computing images perceptual hashes and using a vantage poin
 
 ### Test Images
 
-The images directory contains some images to test against. These are a collection of cat images and images from a wallpaper dump. In particular these images have variation of direct duplicates, recolorings, and similar looking images for a solid test case. We can observe the accuracy difference between dhash and dct against these.
+The testimages directory contains some images to test against. These are a collection of cat images and images from a wallpaper dump. In particular these images have variation of direct duplicates, recolorings, and similar looking images for a solid test case. We can observe the accuracy difference between dhash and dct against these.
 
 ### Building For Additional Targets
 
