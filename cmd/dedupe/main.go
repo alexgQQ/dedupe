@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/csv"
 	"errors"
 	"flag"
@@ -22,17 +23,21 @@ func main() {
 	flag.Usage = func() {
 		msg := `
 Example usage:
-Output duplicate images found in path/to/images
-	dedupe -t path/to/images
+Compare two images
+	dedupe duplicate/image.jpg potential/duplicate/image.jpg 
+Output duplicate images found in path/to/images and other/path/to/images
+	dedupe path/to/images other/path/to/images
 Find and delete duplicate images in path/to/images and any of it's subdirectories
-	dedupe -target path/to/images -recursive -delete`
+	dedupe -recursive -delete path/to/images
+Read images from a file listing and output any duplicates found
+	cat images.txt | dedupe -`
 		fmt.Fprintln(flag.CommandLine.Output(), "dedupe is a program for discovering duplicate images")
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s [-r | -v | -m | -d | -o | -hash] <images> [<images> ...] \n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Fprintln(flag.CommandLine.Output(), msg)
 	}
 
-	var target string
+	var targets []string
 	var output string
 	var recursive bool
 	var verbose bool
@@ -40,13 +45,10 @@ Find and delete duplicate images in path/to/images and any of it's subdirectorie
 	var delete bool
 	var hashName string
 
-	flag.StringVar(&target, "target", "", "The directory to search for image duplicates")
-	flag.StringVar(&target, "t", "", "alias for -target")
-
 	flag.StringVar(&output, "output", "stdout", "Set to a file for a csv output, otherwise it goes to stdout")
 	flag.StringVar(&output, "o", "stdout", "alias for -output")
 
-	flag.BoolVar(&recursive, "recursive", false, "Search for images in subdirectories of the target directory")
+	flag.BoolVar(&recursive, "recursive", false, "Search for images in subdirectories of any target directories")
 	flag.BoolVar(&recursive, "r", false, "alias for -recursive")
 
 	flag.BoolVar(&verbose, "verbose", false, "Run application with info logging")
@@ -63,6 +65,21 @@ Find and delete duplicate images in path/to/images and any of it's subdirectorie
 	flag.StringVar(&hashName, "hash", "dct", fmt.Sprintf("Which type of hash to use for searching. Available options are %s", opts))
 
 	flag.Parse()
+	args := flag.Args()
+	if len(args) <= 0 {
+		slog.Error("No images provided")
+		os.Exit(1)
+	} else if slices.Contains(args, "-") {
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			line := scanner.Text()
+			// This could be problematic if filepaths have spaces, a bit of an edge case
+			// so I won't worry for now
+			targets = append(targets, strings.Split(line, " ")...)
+		}
+	} else {
+		targets = args
+	}
 
 	var logLevel = new(slog.LevelVar)
 	h := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel})
