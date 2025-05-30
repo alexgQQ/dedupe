@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -38,24 +37,28 @@ Output duplicate images found in path/to/images and other/path/to/images
 	dedupe path/to/images other/path/to/images
 Find and delete duplicate images in path/to/images and any of it's subdirectories
 	dedupe -recursive -delete path/to/images
-Read images from a file listing and output any duplicates found
-	cat images.txt | dedupe -`
+Read images from a file listing and output any duplicates found in a csv like format
+	cat images.txt | dedupe -o - > duplicates.csv`
 		fmt.Fprintln(flag.CommandLine.Output(), "dedupe is a program for discovering duplicate images")
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s [-r | -v | -m | -d | -o | -hash] <images> [<images> ...] \n", os.Args[0])
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s [-r | -v | -m | -d | -o | -q | -hash] <images> [<images> ...] \n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Fprintln(flag.CommandLine.Output(), msg)
 	}
 
 	var targets []string
-	var output string
+	var output bool
+	var quiet bool
 	var recursive bool
 	var verbose bool
 	var move bool
 	var delete bool
 	var hashName string
 
-	flag.StringVar(&output, "output", "stdout", "Set to a file for a csv output, otherwise it goes to stdout")
-	flag.StringVar(&output, "o", "stdout", "alias for -output")
+	flag.BoolVar(&output, "output", false, "Suppress info output and only output results. Intended to be used for piping output to a file or process")
+	flag.BoolVar(&output, "o", false, "alias for -output")
+
+	flag.BoolVar(&quiet, "quiet", false, "Suppress all output")
+	flag.BoolVar(&quiet, "q", false, "alias for -quiet")
 
 	flag.BoolVar(&recursive, "recursive", false, "Search for images in subdirectories of any target directories")
 	flag.BoolVar(&recursive, "r", false, "alias for -recursive")
@@ -146,24 +149,25 @@ Read images from a file listing and output any duplicates found
 		duplicates, total, _ = dedupe.Duplicates(files, hashType)
 	}
 
+	defaultWriter := os.Stdout
+	if output || quiet {
+		// io.Discard seems to be of the proper type but does not compile
+		// so I'm doing this instead
+		defaultWriter, _ = os.Open(os.DevNull)
+		defer defaultWriter.Close()
+	}
 	if total == 0 {
-		fmt.Println("No duplicate images found")
+		fmt.Fprintln(defaultWriter, "No duplicate images found")
 		return nil
 	}
+	fmt.Fprintf(defaultWriter, "Found %d duplicate images\n", total)
 
-	fmt.Printf("Found %d duplicate images\n", total)
 	var w *csv.Writer
-	if output == "stdout" {
-		w = csv.NewWriter(os.Stdout)
+	if quiet {
+		w = csv.NewWriter(defaultWriter)
 	} else {
-		path, _ := filepath.Abs(output)
-		file, err := os.OpenFile(path, os.O_RDWR, 0666)
-		if errors.Is(err, os.ErrNotExist) {
-			file, _ = os.Create(path)
-		}
-		w = csv.NewWriter(file)
+		w = csv.NewWriter(os.Stdout)
 	}
-
 	for _, group := range duplicates {
 		if err := w.Write(group); err != nil {
 			slog.Error("Error writing record to csv", "error", err)
