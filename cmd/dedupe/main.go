@@ -18,6 +18,20 @@ import (
 )
 
 func main() {
+
+	flag.Usage = func() {
+		msg := `
+Example usage:
+Output duplicate images found in path/to/images
+	dedupe -t path/to/images
+Find and delete duplicate images in path/to/images and any of it's subdirectories
+	dedupe -target path/to/images -recursive -delete`
+		fmt.Fprintln(flag.CommandLine.Output(), "dedupe is a program for discovering duplicate images")
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		flag.PrintDefaults()
+		fmt.Fprintln(flag.CommandLine.Output(), msg)
+	}
+
 	var target string
 	var output string
 	var recursive bool
