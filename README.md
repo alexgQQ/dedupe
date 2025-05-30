@@ -12,7 +12,7 @@ go install github.com/alexgQQ/dedupe/cmd/dedupe@latest
 # or
 git clone https://github.com/alexgQQ/dedupe.git
 cd dedupe
-go build -ldflags '-s -w' -o dedupe cmd/dedupe/main.go
+go build -ldflags '-s -w' -o dist/dedupe cmd/dedupe/main.go
 ```
 
 ## Usage
@@ -88,7 +88,7 @@ docker run \
   -w /go/src/github.com/alexgQQ/go-image-deduper \
   -e CGO_ENABLED=1 \
   docker.elastic.co/beats-dev/golang-crossbuild:${GOVERSION}-main \
-  --build-cmd "go build -ldflags '-s -w' -o dedupe cmd/dedupe/main.go" \
+  --build-cmd "go build -ldflags '-s -w' -o dist/dedupe cmd/dedupe/main.go" \
   -p linux/amd64
 
 docker run \
@@ -96,6 +96,6 @@ docker run \
   -w /go/src/github.com/alexgQQ/go-image-deduper \
   -e CGO_ENABLED=1 \
   docker.elastic.co/beats-dev/golang-crossbuild:${GOVERSION}-main \
-  --build-cmd "go build -ldflags '-s -w' -o dedupe.exe cmd/dedupe/main.go" \
+  --build-cmd "go build -ldflags '-s -w' -o dist/dedupe.exe cmd/dedupe/main.go" \
   -p windows/amd64
 ```

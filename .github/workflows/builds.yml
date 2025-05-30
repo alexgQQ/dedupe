@@ -22,7 +22,7 @@ jobs:
           -w /go/src/github.com/alexgQQ/go-image-deduper
           -e CGO_ENABLED=1
           docker.elastic.co/beats-dev/golang-crossbuild:${CONTAINER}
-          --build-cmd "go build -ldflags '-s -w' -o dedupe.linux-${ARCH} cmd/dedupe/main.go"
+          --build-cmd "go build -ldflags '-s -w' -o dist/dedupe.linux-${ARCH} cmd/dedupe/main.go"
           -p linux/${ARCH}
 
       - name: Build windows amd64
@@ -35,12 +35,12 @@ jobs:
           -w /go/src/github.com/alexgQQ/go-image-deduper
           -e CGO_ENABLED=1
           docker.elastic.co/beats-dev/golang-crossbuild:${CONTAINER}
-          --build-cmd "go build -ldflags '-s -w' -o dedupe.windows-${ARCH}.exe cmd/dedupe/main.go"
+          --build-cmd "go build -ldflags '-s -w' -o dist/dedupe.windows-${ARCH}.exe cmd/dedupe/main.go"
           -p windows/${ARCH}
 
       - name: create new release
         uses: softprops/action-gh-release@v2
         with:
-          files: dedupe*
+          files: dist/dedupe*
           fail_on_unmatched_files: true
           generate_release_notes: true
