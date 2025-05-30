@@ -19,12 +19,21 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 
 	flag.Usage = func() {
 		msg := `
 Example usage:
 Compare two images
-	dedupe duplicate/image.jpg potential/duplicate/image.jpg 
+	dedupe duplicate/image.jpg duplicate/image-copy.jpg
+Find duplicates of target/image.jpg in path/to/images
+	dedupe target/image.jpg path/to/images
 Output duplicate images found in path/to/images and other/path/to/images
 	dedupe path/to/images other/path/to/images
 Find and delete duplicate images in path/to/images and any of it's subdirectories
@@ -67,8 +76,7 @@ Read images from a file listing and output any duplicates found
 	flag.Parse()
 	args := flag.Args()
 	if len(args) <= 0 {
-		slog.Error("No images provided")
-		os.Exit(1)
+		return errors.New("no arguments provided")
 	} else if slices.Contains(args, "-") {
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
@@ -102,17 +110,17 @@ Read images from a file listing and output any duplicates found
 	noDirs := true
 	imgTarget := false
 	for i, target := range targets {
-		path, isImg, isDir := utils.ImageOrDir(target)
+		_, isImg, isDir := utils.ImageOrDir(target)
 		if !isImg && !isDir {
 			continue
 		} else if isImg {
 			if i == 0 {
 				imgTarget = true
 			}
-			files = append(files, path)
+			files = append(files, target)
 		} else if isDir {
 			noDirs = false
-			images := utils.FindImages(path, recursive)
+			images := utils.FindImages(target, recursive)
 			files = append(files, images...)
 		}
 	}
@@ -120,42 +128,30 @@ Read images from a file listing and output any duplicates found
 	var duplicates [][]string
 	var total int
 	if len(files) <= 0 {
-		slog.Error("No image file provided to search")
-		os.Exit(1)
+		return errors.New("no image file were found")
 	} else if noDirs && len(files) == 2 {
 		isDupe, results := dedupe.Compare(hashType, files[0], files[1])
 		if isDupe {
+			results = append(results, files[0])
 			duplicates = append(duplicates, results)
 			total = 2
-			fmt.Println("Images are duplicates")
-		} else {
-			fmt.Println("Images are not duplicates")
 		}
-		os.Exit(0)
 	} else if imgTarget {
 		isDupe, results := dedupe.Compare(hashType, files[0], files[1:]...)
-		if !isDupe {
-			fmt.Println("No duplicates found")
-		} else {
+		if isDupe {
 			duplicates = append(duplicates, results)
 			total = len(results)
-			fmt.Printf("Found %d duplicates\n", len(results))
 		}
 	} else {
-		fmt.Println("Searching for duplicate images...")
 		duplicates, total, _ = dedupe.Duplicates(files, hashType)
 	}
 
-	// if err != nil {
-	// 	slog.Error("Error occurred while finding duplicates", "error", err)
-	// 	os.Exit(1)
-	// }
-	// if total == 0 {
-	// 	fmt.Print("No duplicate images found")
-	// 	os.Exit(0)
-	// }
+	if total == 0 {
+		fmt.Println("No duplicate images found")
+		return nil
+	}
 
-	fmt.Printf("%d duplicate images found:\n", total)
+	fmt.Printf("Found %d duplicate images\n", total)
 	var w *csv.Writer
 	if output == "stdout" {
 		w = csv.NewWriter(os.Stdout)
@@ -190,4 +186,5 @@ Read images from a file listing and output any duplicates found
 			}
 		}
 	}
+	return nil
 }

@@ -144,6 +144,9 @@ func Compare(hashType hash.HashType, target string, files ...string) (found bool
 	targetHash := hashVals(hashType, target)
 	// There potential to speed this up and run with goroutines here
 	for _, file := range files {
+		if target == file {
+			continue
+		}
 		checkHash := hashVals(hashType, file)
 		switch hashType {
 		case hash.DCT:
