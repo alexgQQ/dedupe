@@ -123,3 +123,41 @@ func Duplicates(files []string, hashType hash.HashType) ([][]string, int, error)
 	}
 	return filegroups, total, nil
 }
+
+func hashVals(hashType hash.HashType, file string) []uint64 {
+	img, _ := utils.LoadImage(file)
+	vals := make([]uint64, 0)
+	switch hashType {
+	case hash.DCT:
+		hash := hash.Dct(img)
+		vals = append(vals, hash)
+	case hash.DHASH:
+		rHash, cHash := hash.Dhash(img)
+		vals = append(vals, rHash)
+		vals = append(vals, cHash)
+	}
+	return vals
+}
+
+// I like the variadic syntax of this but it changes the consistency of the hashType arg
+func Compare(hashType hash.HashType, target string, files ...string) (found bool, results []string) {
+	targetHash := hashVals(hashType, target)
+	// There potential to speed this up and run with goroutines here
+	for _, file := range files {
+		checkHash := hashVals(hashType, file)
+		switch hashType {
+		case hash.DCT:
+			if hash.Hamming(targetHash[0], checkHash[0]) < int(hashType.Threshold) {
+				found = true
+				results = append(results, file)
+			}
+		case hash.DHASH:
+			dist := hash.Hamming(targetHash[0], checkHash[0]) + hash.Hamming(targetHash[1], checkHash[1])
+			if dist < int(hashType.Threshold) {
+				found = true
+				results = append(results, file)
+			}
+		}
+	}
+	return found, results
+}

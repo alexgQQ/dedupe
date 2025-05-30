@@ -98,28 +98,63 @@ Read images from a file listing and output any duplicates found
 		hashType = hash.HashTypes[hashName]
 	}
 
-	if err := utils.PathIsDir(target); err != nil {
-		slog.Error("Invalid target path", "path", target, "error", err)
-		os.Exit(1)
+	var files []string
+	noDirs := true
+	imgTarget := false
+	for i, target := range targets {
+		path, isImg, isDir := utils.ImageOrDir(target)
+		if !isImg && !isDir {
+			continue
+		} else if isImg {
+			if i == 0 {
+				imgTarget = true
+			}
+			files = append(files, path)
+		} else if isDir {
+			noDirs = false
+			images := utils.FindImages(path, recursive)
+			files = append(files, images...)
+		}
 	}
-	files := utils.FindImages(target, recursive)
-	if len(files) < 1 {
-		slog.Error("No images found at target path", "path", target)
-		os.Exit(1)
-	}
-	target, _ = filepath.Abs(target)
 
-	fmt.Printf("Scanning %s for duplicate images...\n", target)
-	duplicates, total, err := dedupe.Duplicates(files, hashType)
-
-	if err != nil {
-		slog.Error("Error occurred while finding duplicates", "error", err)
+	var duplicates [][]string
+	var total int
+	if len(files) <= 0 {
+		slog.Error("No image file provided to search")
 		os.Exit(1)
-	}
-	if total == 0 {
-		fmt.Print("No duplicate images found")
+	} else if noDirs && len(files) == 2 {
+		isDupe, results := dedupe.Compare(hashType, files[0], files[1])
+		if isDupe {
+			duplicates = append(duplicates, results)
+			total = 2
+			fmt.Println("Images are duplicates")
+		} else {
+			fmt.Println("Images are not duplicates")
+		}
 		os.Exit(0)
+	} else if imgTarget {
+		isDupe, results := dedupe.Compare(hashType, files[0], files[1:]...)
+		if !isDupe {
+			fmt.Println("No duplicates found")
+		} else {
+			duplicates = append(duplicates, results)
+			total = len(results)
+			fmt.Printf("Found %d duplicates\n", len(results))
+		}
+	} else {
+		fmt.Println("Searching for duplicate images...")
+		duplicates, total, _ = dedupe.Duplicates(files, hashType)
 	}
+
+	// if err != nil {
+	// 	slog.Error("Error occurred while finding duplicates", "error", err)
+	// 	os.Exit(1)
+	// }
+	// if total == 0 {
+	// 	fmt.Print("No duplicate images found")
+	// 	os.Exit(0)
+	// }
+
 	fmt.Printf("%d duplicate images found:\n", total)
 	var w *csv.Writer
 	if output == "stdout" {
@@ -141,7 +176,7 @@ Read images from a file listing and output any duplicates found
 	w.Flush()
 
 	if move {
-		dupeDir := filepath.Join(target, "duplicates")
+		dupeDir := "duplicates"
 		os.Mkdir(dupeDir, 0750)
 		for _, files := range duplicates {
 			if err := utils.MoveFiles(files, dupeDir); err != nil {

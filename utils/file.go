@@ -32,6 +32,11 @@ func matchesAnyExt(path string, extensions []string) bool {
 	return false
 }
 
+func isImage(filename string) bool {
+	var ext = []string{".png", ".jpg", ".jpeg"}
+	return matchesAnyExt(filename, ext)
+}
+
 // It would be interesting to do this in an iterator pattern
 // instead of loading a array of strings that could be potentially very large
 // With more recent go version we can do some things like generator patterns
@@ -39,12 +44,11 @@ func matchesAnyExt(path string, extensions []string) bool {
 // check out the rabbit hole https://github.com/golang/go/issues/64341
 func FindImages(root string, subdirs bool) []string {
 	var images []string
-	var ext = []string{".png", ".jpg", ".jpeg"}
 	filepath.WalkDir(root, func(s string, d fs.DirEntry, e error) error {
 		if e != nil {
 			return e
 		}
-		if matchesAnyExt(d.Name(), ext) {
+		if isImage(d.Name()) {
 			images = append(images, s)
 		}
 		if !subdirs && root != s && d.IsDir() {
@@ -75,27 +79,28 @@ func DeleteFiles(files []string) (e error) {
 	return
 }
 
-func PathIsDir(path string) error {
+func ImageOrDir(path string) (abs string, isImg bool, isDir bool) {
 	if path == "" {
-		return errors.New("path cannot be empty")
+		return
 	}
 
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return errors.New("invalid path")
+		return
 	}
 
 	file, err := os.Stat(abs)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return errors.New("path does not exist")
+			return
 		}
-		return errors.New("error checking path")
+		return
 	}
 
-	if !file.IsDir() {
-		return errors.New("path is not a directory")
+	if file.IsDir() {
+		isDir = true
+	} else if isImage(file.Name()) {
+		isImg = true
 	}
-
-	return nil
+	return
 }
