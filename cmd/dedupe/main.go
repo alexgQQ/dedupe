@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -50,8 +51,11 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	var quiet bool
 	var recursive bool
 	var verbose bool
-	var move bool
+	var search bool
+	var move string
+	var copy string
 	var delete bool
+	var deleteAll bool
 	var hashName string
 
 	flag.BoolVar(&output, "output", false, "Suppress info output and only output results. Intended to be used for piping output to a file or process")
@@ -66,11 +70,16 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	flag.BoolVar(&verbose, "verbose", false, "Run application with info logging")
 	flag.BoolVar(&verbose, "v", false, "alias for -verbose")
 
-	flag.BoolVar(&move, "move", false, "Move duplicate images to a `duplicates` directory under the target directory")
-	flag.BoolVar(&move, "m", false, "alias for -move")
+	flag.StringVar(&move, "move", "", "Move duplicate images to a the provided directory. The provided path will be created if it doesn't exist")
+	flag.StringVar(&move, "m", "", "alias for -move")
+	flag.StringVar(&copy, "copy", "", "Same as move but will copy files instead")
+	flag.StringVar(&copy, "c", "", "alias for -copy")
 
-	flag.BoolVar(&delete, "delete", false, "Delete duplicate images")
+	flag.BoolVar(&delete, "delete", false, "Delete all secondary instances of duplicates found")
 	flag.BoolVar(&delete, "d", false, "alias for -delete")
+	flag.BoolVar(&deleteAll, "delete-all", false, "Delete all instances of duplicate images found")
+
+	flag.BoolVar(&search, "search", false, "Force a search for any duplicates against the images provided")
 
 	hashTypes := slices.Sorted(maps.Keys(hash.HashTypes))
 	opts := strings.Join(hashTypes, ", ")
@@ -110,7 +119,6 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	}
 
 	var files []string
-	noDirs := true
 	imgTarget := false
 	for i, target := range targets {
 		_, isImg, isDir := utils.ImageOrDir(target)
@@ -122,7 +130,6 @@ Read images from a file listing and output any duplicates found in a csv like fo
 			}
 			files = append(files, target)
 		} else if isDir {
-			noDirs = false
 			images := utils.FindImages(target, recursive)
 			files = append(files, images...)
 		}
@@ -132,14 +139,7 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	var total int
 	if len(files) <= 0 {
 		return errors.New("no image file were found")
-	} else if noDirs && len(files) == 2 {
-		isDupe, results := dedupe.Compare(hashType, files[0], files[1])
-		if isDupe {
-			results = append(results, files[0])
-			duplicates = append(duplicates, results)
-			total = 2
-		}
-	} else if imgTarget {
+	} else if imgTarget && !search {
 		isDupe, results := dedupe.Compare(hashType, files[0], files[1:]...)
 		if isDupe {
 			duplicates = append(duplicates, results)
@@ -158,9 +158,15 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	}
 	if total == 0 {
 		fmt.Fprintln(defaultWriter, "No duplicate images found")
+		// I think it makes sense to return an error so a return code can be
+		// sent specifically for no duplicates case
 		return nil
 	}
-	fmt.Fprintf(defaultWriter, "Found %d duplicate images\n", total)
+	if imgTarget && !search {
+		fmt.Fprintf(defaultWriter, "These %d images are duplicates of %s\n", total, files[0])
+	} else {
+		fmt.Fprintf(defaultWriter, "These %d images are duplicates\n", total)
+	}
 
 	var w *csv.Writer
 	if quiet {
@@ -175,16 +181,27 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	}
 	w.Flush()
 
-	if move {
-		dupeDir := "duplicates"
-		os.Mkdir(dupeDir, 0750)
-		for _, files := range duplicates {
-			if err := utils.MoveFiles(files, dupeDir); err != nil {
+	if move != "" {
+		for i, files := range duplicates {
+			parent := filepath.Join(move, fmt.Sprintf("group%d", i))
+			os.MkdirAll(parent, 0750)
+			if err := utils.MoveFiles(files, parent); err != nil {
 				slog.Error("Error moving files", "error", err)
+			}
+		}
+	} else if copy != "" {
+		for i, files := range duplicates {
+			parent := filepath.Join(copy, fmt.Sprintf("group%d", i))
+			os.MkdirAll(parent, 0750)
+			if err := utils.CopyFiles(files, parent); err != nil {
+				slog.Error("Error copying files", "error", err)
 			}
 		}
 	} else if delete {
 		for _, files := range duplicates {
+			if !deleteAll {
+				files = files[1:]
+			}
 			if err := utils.DeleteFiles(files); err != nil {
 				slog.Error("Error deleting files", "error", err)
 			}

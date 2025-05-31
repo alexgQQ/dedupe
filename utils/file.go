@@ -71,6 +71,18 @@ func MoveFiles(files []string, dir string) (e error) {
 }
 
 // Bubble up any errors without breaking the loop
+func CopyFiles(files []string, dir string) (e error) {
+	for _, src := range files {
+		filename := filepath.Base(src)
+		dst := filepath.Join(dir, filename)
+		// A hard link should be sufficient
+		err := os.Link(src, dst)
+		e = errors.Join(e, err)
+	}
+	return
+}
+
+// Bubble up any errors without breaking the loop
 func DeleteFiles(files []string) (e error) {
 	for _, f := range files {
 		err := os.Remove(f)
