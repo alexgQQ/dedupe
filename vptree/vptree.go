@@ -27,12 +27,12 @@ func (c *FileMapper) addFile(file string) uint {
 	return c.count
 }
 
-func (c *FileMapper) ByID(id uint) (string, error) {
+func (c *FileMapper) ByID(id uint) string {
 	// A panic may be more appropriate if the id is off then something is very wrong
 	// if int(id) > len(c.files) {
 	// 	return "", fmt.Errorf("integer %d is outside of item array", id)
 	// }
-	return c.files[id-1], nil
+	return c.files[id-1]
 }
 
 // 	Each Item represents a hash for an image file.

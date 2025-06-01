@@ -34,14 +34,16 @@ Compare two images
 	dedupe duplicate/image.jpg duplicate/image-copy.jpg
 Find duplicates of target/image.jpg in path/to/images
 	dedupe target/image.jpg path/to/images
-Output duplicate images found in path/to/images and other/path/to/images
+Find any duplicate images in path/to/images and other/path/to/images
 	dedupe path/to/images other/path/to/images
 Find and delete duplicate images in path/to/images and any of it's subdirectories
 	dedupe -recursive -delete path/to/images
+Find and move duplicate images in path/to/images to duplicates dir and suppress output
+	dedupe -move duplicates -q path/to/images
 Read images from a file listing and output any duplicates found in a csv like format
-	cat images.txt | dedupe -o - > duplicates.csv`
-		fmt.Fprintln(flag.CommandLine.Output(), "dedupe is a program for discovering duplicate images")
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s [-r | -v | -m | -d | -o | -q | -hash] <images> [<images> ...] \n", os.Args[0])
+	cat images.txt | dedupe --search -o - > duplicates.csv`
+		fmt.Fprintln(flag.CommandLine.Output(), "dedupe is a program for discovering and managing duplicate images")
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s [-r|-v|-m <dir>|-c <dir>|-d|-o|-q|-hash|-search|-delete-all|-threshold <integer>] <image|-|dir> [<image|dir> ...] \n", os.Args[0])
 		flag.PrintDefaults()
 		fmt.Fprintln(flag.CommandLine.Output(), msg)
 	}
@@ -142,17 +144,19 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	}
 
 	var duplicates [][]string
+	var results []string
 	var total int
-	if len(files) <= 0 {
-		return errors.New("no image file were found")
+	var err error
+	if len(files) <= 1 {
+		return errors.New("not enough images provided")
 	} else if imgTarget && !search {
-		isDupe, results := dedupe.Compare(hashType, files[0], files[1:]...)
-		if isDupe {
+		results, err = dedupe.Compare(hashType, files[0], files[1:]...)
+		if results != nil {
 			duplicates = append(duplicates, results)
 			total = len(results)
 		}
 	} else {
-		duplicates, total, _ = dedupe.Duplicates(files, hashType)
+		duplicates, total, err = dedupe.Duplicates(hashType, files)
 	}
 
 	defaultWriter := os.Stdout
@@ -181,8 +185,9 @@ Read images from a file listing and output any duplicates found in a csv like fo
 		w = csv.NewWriter(os.Stdout)
 	}
 	for _, group := range duplicates {
-		if err := w.Write(group); err != nil {
-			slog.Error("Error writing record to csv", "error", err)
+		if e := w.Write(group); e != nil {
+			e = fmt.Errorf("unable to format csv output %w", e)
+			err = errors.Join(err, e)
 		}
 	}
 	w.Flush()
@@ -191,16 +196,18 @@ Read images from a file listing and output any duplicates found in a csv like fo
 		for i, files := range duplicates {
 			parent := filepath.Join(move, fmt.Sprintf("group%d", i))
 			os.MkdirAll(parent, 0750)
-			if err := utils.MoveFiles(files, parent); err != nil {
-				slog.Error("Error moving files", "error", err)
+			if e := utils.MoveFiles(files, parent); e != nil {
+				e = fmt.Errorf("unable to move files %s to %s %w", files, parent, e)
+				err = errors.Join(err, e)
 			}
 		}
 	} else if copy != "" {
 		for i, files := range duplicates {
 			parent := filepath.Join(copy, fmt.Sprintf("group%d", i))
 			os.MkdirAll(parent, 0750)
-			if err := utils.CopyFiles(files, parent); err != nil {
-				slog.Error("Error copying files", "error", err)
+			if e := utils.CopyFiles(files, parent); e != nil {
+				e = fmt.Errorf("unable to copy files %s to %s %w", files, parent, e)
+				err = errors.Join(err, e)
 			}
 		}
 	} else if delete {
@@ -208,10 +215,11 @@ Read images from a file listing and output any duplicates found in a csv like fo
 			if !deleteAll {
 				files = files[1:]
 			}
-			if err := utils.DeleteFiles(files); err != nil {
-				slog.Error("Error deleting files", "error", err)
+			if e := utils.DeleteFiles(files); e != nil {
+				e = fmt.Errorf("unable to delete files %s %w", files, e)
+				err = errors.Join(err, e)
 			}
 		}
 	}
-	return nil
+	return err
 }
