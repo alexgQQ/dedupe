@@ -15,7 +15,19 @@ var (
 	DCT   hash.HashType = hash.DCT
 )
 
-func buildTree(files []string, hashType hash.HashType) (*vptree.VPTree, *vptree.FileMapper) {
+func imageHash(hashType hash.HashType, img image.Image) (hashes []uint64) {
+	if hashType.Equal(hash.DCT) {
+		hash := hash.Dct(img)
+		hashes = append(hashes, hash)
+	} else if hashType.Equal(hash.DHASH) {
+		rHash, cHash := hash.Dhash(img)
+		hashes = append(hashes, rHash)
+		hashes = append(hashes, cHash)
+	}
+	return
+}
+
+func buildTree(files []string, hashType hash.HashType) (*vptree.VPTree, *vptree.FileMapper, error) {
 	var wg sync.WaitGroup
 	var fileMap vptree.FileMapper
 

@@ -57,6 +57,7 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	var delete bool
 	var deleteAll bool
 	var hashName string
+	var threshold int
 
 	flag.BoolVar(&output, "output", false, "Suppress info output and only output results. Intended to be used for piping output to a file or process")
 	flag.BoolVar(&output, "o", false, "alias for -output")
@@ -80,6 +81,7 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	flag.BoolVar(&deleteAll, "delete-all", false, "Delete all instances of duplicate images found")
 
 	flag.BoolVar(&search, "search", false, "Force a search for any duplicates against the images provided")
+	flag.IntVar(&threshold, "threshold", 0, "Set the threshold score for search criteria. Smaller values are more restrictive in results.")
 
 	hashTypes := slices.Sorted(maps.Keys(hash.HashTypes))
 	opts := strings.Join(hashTypes, ", ")
@@ -116,6 +118,10 @@ Read images from a file listing and output any duplicates found in a csv like fo
 		hashType = hash.DCT
 	} else {
 		hashType = hash.HashTypes[hashName]
+	}
+
+	if threshold > 0 {
+		hashType.Threshold = float64(threshold)
 	}
 
 	var files []string

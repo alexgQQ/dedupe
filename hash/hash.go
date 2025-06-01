@@ -15,16 +15,24 @@ type HashType struct {
 	Threshold float64
 }
 
+// Since the HashType is a struct any comparison done in a switch
+// statement will compare all fields,
+// so if the Threshold is changed via flags then it fails downstream
+func (h HashType) Equal(H HashType) bool {
+	return h.name == H.name
+}
+
 // Based on some of the initial documentation,
 // https://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html
 // https://phash.org/docs/design.html
 // The dhash implementation should work with 10 and the dct should work with 22
-
 var DHASH HashType = HashType{
 	name:      "dhash",
 	Threshold: 10.0,
 }
 
+// I did some tests on other large image sets and found that non-duplicates did fall within 18-20
+// Maybe some more testing should be done or just lower this/make it configurable by call
 var DCT HashType = HashType{
 	name:      "dct",
 	Threshold: 22.0,
