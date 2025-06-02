@@ -12,7 +12,7 @@ go install github.com/alexgQQ/dedupe/cmd/dedupe@latest
 # or
 git clone https://github.com/alexgQQ/dedupe.git
 cd dedupe
-go build -ldflags '-s -w' -o dist/dedupe cmd/dedupe/main.go
+make build
 ```
 
 ## Usage
@@ -86,8 +86,7 @@ go run cmd/dedupe/main.go -v -t testimages
 
 Keep it clean and tidy
 ```bash
-go fmt ./...
-go test -count 5 ./...
+make fmt && make test
 ```
 
 Issues and contributions are welcome. Guidelines are pretty loose:
@@ -110,16 +109,18 @@ GOVERSION=1.24.3
 docker run \
   -v .:/go/src/github.com/alexgQQ/go-image-deduper \
   -w /go/src/github.com/alexgQQ/go-image-deduper \
-  -e CGO_ENABLED=1 \
+  -e CGO_ENABLED=0 \
+  -e BINARY=dedupe.linux \
   docker.elastic.co/beats-dev/golang-crossbuild:${GOVERSION}-main \
-  --build-cmd "go build -ldflags '-s -w' -o dist/dedupe cmd/dedupe/main.go" \
+  --build-cmd "make build" \
   -p linux/amd64
 
 docker run \
   -v .:/go/src/github.com/alexgQQ/go-image-deduper \
   -w /go/src/github.com/alexgQQ/go-image-deduper \
-  -e CGO_ENABLED=1 \
+  -e CGO_ENABLED=0 \
+  -e BINARY=dedupe.window.exe \
   docker.elastic.co/beats-dev/golang-crossbuild:${GOVERSION}-main \
-  --build-cmd "go build -ldflags '-s -w' -o dist/dedupe.exe cmd/dedupe/main.go" \
+  --build-cmd "make build" \
   -p windows/amd64
 ```

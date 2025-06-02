@@ -20,9 +20,11 @@ jobs:
           docker run
           -v .:/go/src/github.com/alexgQQ/go-image-deduper
           -w /go/src/github.com/alexgQQ/go-image-deduper
-          -e CGO_ENABLED=1
+          -e CGO_ENABLED=0
+          -e VERSION=$GITHUB_REF_NAME
+          -e BINARY=dedupe.linux-${ARCH}
           docker.elastic.co/beats-dev/golang-crossbuild:${CONTAINER}
-          --build-cmd "go build -ldflags '-s -w' -o dist/dedupe.linux-${ARCH} cmd/dedupe/main.go"
+          --build-cmd "make build"
           -p linux/${ARCH}
 
       - name: Build windows amd64
@@ -33,9 +35,11 @@ jobs:
           docker run
           -v .:/go/src/github.com/alexgQQ/go-image-deduper
           -w /go/src/github.com/alexgQQ/go-image-deduper
-          -e CGO_ENABLED=1
+          -e CGO_ENABLED=0
+          -e VERSION=$GITHUB_REF_NAME
+          -e BINARY=dedupe.windows-${ARCH}.exe
           docker.elastic.co/beats-dev/golang-crossbuild:${CONTAINER}
-          --build-cmd "go build -ldflags '-s -w' -o dist/dedupe.windows-${ARCH}.exe cmd/dedupe/main.go"
+          --build-cmd "make build"
           -p windows/${ARCH}
 
       - name: create new release

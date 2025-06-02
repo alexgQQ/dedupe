@@ -60,6 +60,7 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	var deleteAll bool
 	var hashName string
 	var threshold int
+	var version bool
 
 	flag.BoolVar(&output, "output", false, "Suppress info output and only output results. Intended to be used for piping output to a file or process")
 	flag.BoolVar(&output, "o", false, "alias for -output")
@@ -72,6 +73,8 @@ Read images from a file listing and output any duplicates found in a csv like fo
 
 	flag.BoolVar(&verbose, "verbose", false, "Run application with info logging")
 	flag.BoolVar(&verbose, "v", false, "alias for -verbose")
+
+	flag.BoolVar(&version, "version", false, "Output the version")
 
 	flag.StringVar(&move, "move", "", "Move duplicate images to a the provided directory. The provided path will be created if it doesn't exist")
 	flag.StringVar(&move, "m", "", "alias for -move")
@@ -90,6 +93,17 @@ Read images from a file listing and output any duplicates found in a csv like fo
 	flag.StringVar(&hashName, "hash", "dct", fmt.Sprintf("Which type of hash to use for searching. Available options are %s", opts))
 
 	flag.Parse()
+
+	defaultWriter := os.Stdout
+	if version {
+		if utils.Version != "" {
+			fmt.Fprintf(defaultWriter, "v%s\n", utils.Version)
+		} else {
+			fmt.Fprintf(defaultWriter, "%s-%s\n", utils.Branch, utils.Commit)
+		}
+		return nil
+	}
+
 	args := flag.Args()
 	if len(args) <= 0 {
 		return errors.New("no arguments provided")
@@ -159,7 +173,6 @@ Read images from a file listing and output any duplicates found in a csv like fo
 		duplicates, total, err = dedupe.Duplicates(hashType, files)
 	}
 
-	defaultWriter := os.Stdout
 	if output || quiet {
 		// io.Discard seems to be of the proper type but does not compile
 		// so I'm doing this instead
