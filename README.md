@@ -1,6 +1,6 @@
 # Image Deduplication
 
-This is a simple cli tool for finding and removing duplicate images written in pure Go. When I was back in college I put together a clunky python script to handle removing duplicates for my desktop wallpapers and from image classification datasets using dhash. Now I figured I'd make a more proper tool for it and draw from additional sources to enhance it while practicing Golang.
+This is a simple cli tool for finding and removing duplicate images written in pure Go. A duplicate image is any image that has similar visual content to another. When I was back in college I put together a clunky python script to handle removing duplicates for my desktop wallpapers and from image classification datasets using dhash. Now I figured I'd make a more proper tool for it and draw from additional sources to enhance it while practicing Golang.
 
 ## Install
 
@@ -17,12 +17,32 @@ go build -ldflags '-s -w' -o dist/dedupe cmd/dedupe/main.go
 
 ## Usage
 
-Check the usage
+There are two main usages. Checking for specific duplicates and checking for any duplicates.
+If an image file is provided as the first argument then it will return any duplicates of that image.
+For example we can check if two image are duplicates
+```bash
+dedupe image.jpg image-copy.jpg
+```
+Or we can find duplicate occurrences of an image across other directories
+```bash
+dedupe image.jpg path/to/images path/to/other/images
+```
+
+Otherwise if the first argument is a directory it will search and return any duplicates found
+```bash
+dedupe path/to/images
+```
+Alternatively you can provide a flag to force it into this search mode. This is most relevant if passing a file of images to handle.
+```bash
+cat images.txt | dedupe --search -
+```
+
+More flag usage and options are listed in the help message.
 ```bash
 dedupe --help
 ```
 
-Or import this package and use it in your code
+You can also import this package and use it in your code
 ```bash
 go get github.com/alexgQQ/dedupe@latest
 ```
@@ -45,7 +65,7 @@ func main() {
 		"testimages/copycat.jpg",
 	}
 
-	results, total, _ := dedupe.Duplicates(images, dedupe.DCT)
+	results, total, _ := dedupe.Duplicates(dedupe.DCT, images)
 	fmt.Printf("Found %d duplicates\n", total)
 	if total <= 0 {
 		return
@@ -69,6 +89,10 @@ Keep it clean and tidy
 go fmt ./...
 go test -count 5 ./...
 ```
+
+Issues and contributions are welcome. Guidelines are pretty loose:
+* For any large change please open an issue to have some discussion (for small changes feel free to just fork this and open a PR).
+* Don't add external dependencies
 
 ### Implementation
 
