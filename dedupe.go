@@ -35,13 +35,19 @@ func buildTree(files []string, hashType hash.HashType) (*vptree.VPTree, *vptree.
 	var fileMap vptree.FileMapper
 
 	// By default this will be the runtime.NumCPU but will be GOMAXPROCS if set in the environment
-	nWorkers := runtime.GOMAXPROCS(0)
+	nProcs := runtime.GOMAXPROCS(0)
 	work := make(chan string)
 	results := make(chan *vptree.Item)
-	errs := make(chan error, nWorkers)
+	// If any images fail to load I want to be able to track that but this adds some complexity
+	// since it is across routines. The main process will process the results channel while they come in
+	// but if errors occur that would cause deadlock in whatever routine errored. This can be alleviated by
+	// buffering the error channel but will still deadlock if the amount of errors exceeds the buffer size.
+	// We could open this channel with a large buffer size but I'd rather not allocate that all.
+	// Instead we open another routine to join the errors from this channel as they come in.
+	errs := make(chan error)
 
-	// Spin up nWorkers to process images concurrently
-	for range nWorkers {
+	// Spin up workers to process images concurrently but leave two for handling and error accumulation
+	for range nProcs - 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -66,20 +72,27 @@ func buildTree(files []string, hashType hash.HashType) (*vptree.VPTree, *vptree.
 		}
 		close(work)
 		wg.Wait()
-		close(errs)
 		close(results)
+		close(errs)
+	}()
+
+	// Accumulate errors on a separate routine to avoid blocking the channel
+	var err error
+	go func() {
+		for e := range errs {
+			err = errors.Join(err, e)
+		}
 	}()
 
 	// Accumulate the computed hashes to build the vptree
 	var items []*vptree.Item
 	for item := range results {
+		if item == nil {
+			continue
+		}
 		items = append(items, item)
 	}
-	// Gather any errors during processing
-	var err error
-	for e := range errs {
-		err = errors.Join(err, e)
-	}
+
 	return vptree.New(items), &fileMap, err
 }
 

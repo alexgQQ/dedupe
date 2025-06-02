@@ -170,7 +170,7 @@ Read images from a file listing and output any duplicates found in a csv like fo
 		fmt.Fprintln(defaultWriter, "No duplicate images found")
 		// I think it makes sense to return an error so a return code can be
 		// sent specifically for no duplicates case
-		return nil
+		return err
 	}
 	if imgTarget && !search {
 		fmt.Fprintf(defaultWriter, "These %d images are duplicates of %s\n", total, files[0])
