@@ -1,6 +1,18 @@
 # Image Deduplication
 
-This is a simple cli tool for finding and removing duplicate images written in pure Go. A duplicate image is any image that has similar visual content to another. When I was back in college I put together a clunky python script to handle removing duplicates for my desktop wallpapers and from image classification datasets using dhash. Now I figured I'd make a more proper tool for it and draw from additional sources to enhance it while practicing Golang.
+This is a simple cli tool for finding and removing duplicate images written in pure Go. A duplicate image is any image that has similar visual content to another. This is done with perceptual hashing of the image.
+
+It is capable of finding duplicates with various changes in size, rotation, brightness, saturation or contrast.
+
+It cannot find duplicates that undergo extreme transforms or major changes to the visual content like color inversion, cropping, full rotation or flipping. The detection method works on the visual content of the file but does not do anything semantic in that the same subject on a different background would likely not be detected.
+
+As an example all the images below are transformed from the first cat image and will be flagged as duplicates.
+
+![cat](testimages/cats/cat.jpg) ![dark](testimages/cats/cat-dark.jpg) ![gray](testimages/cats/cat-greyscale.jpg) ![distorted](testimages/cats/cat-distorted.jpg) ![upscaled](testimages/cats/cat-upscaled.jpg) ![saturated](testimages/cats/cat-saturated.jpg) ![skewed](testimages/cats/cat-skewed.jpg) ![shrink](testimages/cats/cat-shrink.jpg) 
+
+```bash
+dedupe testimages/cats/cat.jpg testimages/cats
+```
 
 ## Install
 
@@ -36,7 +48,10 @@ Alternatively you can provide a flag to force it into this search mode. This is 
 ```bash
 cat images.txt | dedupe --search -
 ```
-
+The cli is designed to work with pipelining in this way too. You can generate a csv like list of duplicates from that list of images like this.
+```bash
+cat images.txt | dedupe --search -o - > duplicates.csv
+```
 More flag usage and options are listed in the help message.
 ```bash
 dedupe --help
@@ -60,9 +75,9 @@ import (
 func main() {
 
 	images := []string{
-		"testimages/cat-on-couch.jpg",
-		"testimages/cat.jpg",
-		"testimages/copycat.jpg",
+		"testimages/cats/cat-on-couch.jpg",
+		"testimages/cats/cat.jpg",
+		"testimages/cats/cat-shrink.jpg",
 	}
 
 	results, total, _ := dedupe.Duplicates(dedupe.DCT, images)

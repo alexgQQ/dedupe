@@ -22,6 +22,6 @@ fmt:
 	go fmt ./...
 
 clean:
-	-rm -f dist/*
+	rm -f dist/*
 
 .PHONY: build test fmt clean
